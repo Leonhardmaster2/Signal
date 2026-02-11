@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.signal.transcription</string>
+	</array>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Signal uses on-device speech recognition to transcribe your recordings privately without sending data to external servers. Speech recognition supports multiple languages including German, French, Spanish, and more.</string>
+</dict>
+</plist>

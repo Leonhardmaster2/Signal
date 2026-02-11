@@ -6,20 +6,94 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4F694A262F394EA600ED7242 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F694A252F394EA600ED7242 /* SubscriptionManager.swift */; };
+		4F694A282F394EE100ED7242 /* SubscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F694A272F394EE100ED7242 /* SubscriptionView.swift */; };
+		4F694A2A2F39527100ED7242 /* PremiumFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F694A292F39527100ED7242 /* PremiumFeatures.swift */; };
+		4FB571A12F3A03C70015891A /* OnDeviceTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB571A02F3A03C70015891A /* OnDeviceTranscriptionService.swift */; };
+		4FB571A32F3A03EE0015891A /* OnDeviceSummarizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB571A22F3A03EE0015891A /* OnDeviceSummarizationService.swift */; };
+		AA000004AAAA000000000001 /* SignalWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA000005AAAA000000000001 /* SignalWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA000001AAAA000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4FD0C2172F38DD120080980E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA000002AAAA000000000001;
+			remoteInfo = SignalWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA000003AAAA000000000001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA000004AAAA000000000001 /* SignalWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		4F694A252F394EA600ED7242 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
+		4F694A272F394EE100ED7242 /* SubscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionView.swift; sourceTree = "<group>"; };
+		4F694A292F39527100ED7242 /* PremiumFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumFeatures.swift; sourceTree = "<group>"; };
+		4FB571A02F3A03C70015891A /* OnDeviceTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceTranscriptionService.swift; sourceTree = "<group>"; };
+		4FB571A22F3A03EE0015891A /* OnDeviceSummarizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceSummarizationService.swift; sourceTree = "<group>"; };
 		4FD0C21F2F38DD120080980E /* Signal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Signal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA000005AAAA000000000001 /* SignalWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SignalWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4FD0C3782F39020F0080980E /* Exceptions for "Signal" folder in "Signal" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4FD0C21E2F38DD120080980E /* Signal */;
+		};
+		AA00000EAAAA000000000001 /* Exceptions for "SignalWidgetExtension" folder in "SignalWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AA000002AAAA000000000001 /* SignalWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4FD0C2212F38DD120080980E /* Signal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4FD0C3782F39020F0080980E /* Exceptions for "Signal" folder in "Signal" target */,
+			);
 			path = Signal;
+			sourceTree = "<group>";
+		};
+		AA000006AAAA000000000001 /* SignalWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AA00000EAAAA000000000001 /* Exceptions for "SignalWidgetExtension" folder in "SignalWidgetExtension" target */,
+			);
+			path = SignalWidgetExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		4FD0C21C2F38DD120080980E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA000007AAAA000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,7 +107,13 @@
 			isa = PBXGroup;
 			children = (
 				4FD0C2212F38DD120080980E /* Signal */,
+				AA000006AAAA000000000001 /* SignalWidgetExtension */,
 				4FD0C2202F38DD120080980E /* Products */,
+				4F694A252F394EA600ED7242 /* SubscriptionManager.swift */,
+				4F694A272F394EE100ED7242 /* SubscriptionView.swift */,
+				4F694A292F39527100ED7242 /* PremiumFeatures.swift */,
+				4FB571A02F3A03C70015891A /* OnDeviceTranscriptionService.swift */,
+				4FB571A22F3A03EE0015891A /* OnDeviceSummarizationService.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -41,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				4FD0C21F2F38DD120080980E /* Signal.app */,
+				AA000005AAAA000000000001 /* SignalWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,10 +136,12 @@
 				4FD0C21B2F38DD120080980E /* Sources */,
 				4FD0C21C2F38DD120080980E /* Frameworks */,
 				4FD0C21D2F38DD120080980E /* Resources */,
+				AA000003AAAA000000000001 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA000008AAAA000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				4FD0C2212F38DD120080980E /* Signal */,
@@ -69,6 +152,28 @@
 			productName = Signal;
 			productReference = 4FD0C21F2F38DD120080980E /* Signal.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AA000002AAAA000000000001 /* SignalWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA000009AAAA000000000001 /* Build configuration list for PBXNativeTarget "SignalWidgetExtension" */;
+			buildPhases = (
+				AA00000AAAAA000000000001 /* Sources */,
+				AA000007AAAA000000000001 /* Frameworks */,
+				AA00000BAAAA000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA000006AAAA000000000001 /* SignalWidgetExtension */,
+			);
+			name = SignalWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = SignalWidgetExtension;
+			productReference = AA000005AAAA000000000001 /* SignalWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +186,9 @@
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					4FD0C21E2F38DD120080980E = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					AA000002AAAA000000000001 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -100,12 +208,20 @@
 			projectRoot = "";
 			targets = (
 				4FD0C21E2F38DD120080980E /* Signal */,
+				AA000002AAAA000000000001 /* SignalWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		4FD0C21D2F38DD120080980E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000BAAAA000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -119,10 +235,30 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4FB571A32F3A03EE0015891A /* OnDeviceSummarizationService.swift in Sources */,
+				4F694A282F394EE100ED7242 /* SubscriptionView.swift in Sources */,
+				4FB571A12F3A03C70015891A /* OnDeviceTranscriptionService.swift in Sources */,
+				4F694A2A2F39527100ED7242 /* PremiumFeatures.swift in Sources */,
+				4F694A262F394EA600ED7242 /* SubscriptionManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000AAAAA000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA000008AAAA000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA000002AAAA000000000001 /* SignalWidgetExtension */;
+			targetProxy = AA000001AAAA000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4FD0C2282F38DD140080980E /* Debug */ = {
@@ -256,8 +392,12 @@
 				DEVELOPMENT_TEAM = DA93AGLZ67;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Signal/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Signal needs microphone access to record meetings.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -288,8 +428,12 @@
 				DEVELOPMENT_TEAM = DA93AGLZ67;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Signal/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Signal needs microphone access to record meetings.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -301,6 +445,62 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.Proceduralabs.Signal;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AA00000CAAAA000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = DA93AGLZ67;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SignalWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = SignalWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Proceduralabs.Signal.SignalWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA00000DAAAA000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = DA93AGLZ67;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SignalWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = SignalWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Proceduralabs.Signal.SignalWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -327,6 +527,15 @@
 			buildConfigurations = (
 				4FD0C22B2F38DD140080980E /* Debug */,
 				4FD0C22C2F38DD140080980E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA000009AAAA000000000001 /* Build configuration list for PBXNativeTarget "SignalWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA00000CAAAA000000000001 /* Debug */,
+				AA00000DAAAA000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
