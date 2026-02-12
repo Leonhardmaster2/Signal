@@ -36,8 +36,8 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     /// Monthly transcription limit in seconds
     var transcriptionLimitSeconds: TimeInterval {
         switch self {
-        case .free: return 2 * 3600      // 2 hours
-        case .standard: return 15 * 3600 // 15 hours
+        case .free: return 0             // 0 hours - must upgrade to transcribe
+        case .standard: return 12 * 3600 // 12 hours
         case .pro: return 60 * 3600      // 60 hours
         }
     }
@@ -45,8 +45,8 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     /// Human-readable transcription limit
     var transcriptionLimitLabel: String {
         switch self {
-        case .free: return "2 hours/month"
-        case .standard: return "15 hours/month"
+        case .free: return "Upgrade to transcribe"
+        case .standard: return "12 hours/month"
         case .pro: return "60 hours/month"
         }
     }
@@ -82,15 +82,15 @@ enum SubscriptionTier: String, Codable, CaseIterable {
         switch self {
         case .free:
             return [
-                SubscriptionFeature(icon: "clock", text: "2 hours transcription/month"),
-                SubscriptionFeature(icon: "list.bullet", text: "Standard bullet points"),
-                SubscriptionFeature(icon: "doc.text", text: "Last 5 transcripts only"),
-                SubscriptionFeature(icon: "waveform", text: "Basic audio playback")
+                SubscriptionFeature(icon: "mic.fill", text: "Unlimited free recording"),
+                SubscriptionFeature(icon: "lock.fill", text: "Transcription requires upgrade"),
+                SubscriptionFeature(icon: "waveform", text: "Basic audio playback"),
+                SubscriptionFeature(icon: "doc.text", text: "Last 5 recordings only")
             ]
         case .standard:
             return [
-                SubscriptionFeature(icon: "clock.fill", text: "15 hours transcription/month"),
-                SubscriptionFeature(icon: "brain", text: "Deep Dive summaries"),
+                SubscriptionFeature(icon: "clock.fill", text: "12 hours transcription/month"),
+                SubscriptionFeature(icon: "brain", text: "AI-powered summaries"),
                 SubscriptionFeature(icon: "infinity", text: "Unlimited history"),
                 SubscriptionFeature(icon: "person.2.fill", text: "Speaker identification"),
                 SubscriptionFeature(icon: "doc.richtext", text: "Export to PDF/Markdown"),
@@ -182,6 +182,16 @@ final class SubscriptionManager {
     }
     
     // MARK: - Usage Tracking
+    
+    /// Whether user has an active paid subscription (Standard or Pro)
+    var isSubscribed: Bool {
+        currentTier == .standard || currentTier == .pro
+    }
+    
+    /// Whether user can transcribe (has a paid subscription)
+    var canTranscribeAtAll: Bool {
+        isSubscribed
+    }
     
     /// Remaining transcription time in seconds
     var remainingTranscriptionSeconds: TimeInterval {

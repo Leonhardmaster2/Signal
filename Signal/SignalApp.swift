@@ -21,7 +21,7 @@ struct SignalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .task {
                     await recoverInterruptedRecordingIfNeeded()
                     // Request notification permissions
@@ -159,4 +159,17 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
 extension Notification.Name {
     static let openRecordingFromNotification = Notification.Name("openRecordingFromNotification")
+}
+
+// MARK: - Root View (Handles Onboarding)
+
+struct RootView: View {
+    @State private var showOnboarding = !OnboardingManager.hasCompletedOnboarding
+    
+    var body: some View {
+        ContentView()
+            .fullScreenCover(isPresented: $showOnboarding) {
+                OnboardingView(isPresented: $showOnboarding)
+            }
+    }
 }

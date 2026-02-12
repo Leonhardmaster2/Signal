@@ -91,50 +91,80 @@ struct SubscriptionOverviewView: View {
     
     private var usageCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("THIS MONTH'S USAGE")
-                    .font(AppFont.mono(size: 10, weight: .medium))
-                    .kerning(1.5)
-                    .foregroundStyle(.gray)
+            if subscription.currentTier == .free {
+                // Free tier - show upgrade prompt
+                HStack {
+                    Text("TRANSCRIPTION")
+                        .font(AppFont.mono(size: 10, weight: .medium))
+                        .kerning(1.5)
+                        .foregroundStyle(.gray)
+                    
+                    Spacer()
+                }
                 
-                Spacer()
-                
-                Text("Resets in \(subscription.daysUntilReset) days")
-                    .font(AppFont.mono(size: 10, weight: .regular))
-                    .foregroundStyle(.gray.opacity(0.7))
-            }
-            
-            // Progress bar
-            VStack(alignment: .leading, spacing: 8) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        // Background
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.white.opacity(0.1))
-                            .frame(height: 8)
+                HStack(spacing: 12) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white.opacity(0.5))
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Upgrade to Unlock")
+                            .font(AppFont.mono(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
                         
-                        // Progress
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(progressColor)
-                            .frame(width: geo.size.width * subscription.usagePercentage, height: 8)
+                        Text("Record unlimited audio for free. Upgrade to transcribe with AI.")
+                            .font(AppFont.mono(size: 11, weight: .regular))
+                            .foregroundStyle(.gray)
+                            .lineSpacing(2)
                     }
                 }
-                .frame(height: 8)
-                
+            } else {
+                // Subscribed tier - show usage
                 HStack {
-                    Text(formatUsedTime(subscription.usage.transcriptionSecondsUsed))
-                        .font(AppFont.mono(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                    
-                    Text("of \(formatUsedTime(subscription.currentTier.transcriptionLimitSeconds))")
-                        .font(AppFont.mono(size: 12, weight: .regular))
+                    Text("THIS MONTH'S USAGE")
+                        .font(AppFont.mono(size: 10, weight: .medium))
+                        .kerning(1.5)
                         .foregroundStyle(.gray)
                     
                     Spacer()
                     
-                    Text(subscription.remainingTranscriptionLabel)
-                        .font(AppFont.mono(size: 11, weight: .medium))
-                        .foregroundStyle(progressColor)
+                    Text("Resets in \(subscription.daysUntilReset) days")
+                        .font(AppFont.mono(size: 10, weight: .regular))
+                        .foregroundStyle(.gray.opacity(0.7))
+                }
+                
+                // Progress bar
+                VStack(alignment: .leading, spacing: 8) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            // Background
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.1))
+                                .frame(height: 8)
+                            
+                            // Progress
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(progressColor)
+                                .frame(width: geo.size.width * subscription.usagePercentage, height: 8)
+                        }
+                    }
+                    .frame(height: 8)
+                    
+                    HStack {
+                        Text(formatUsedTime(subscription.usage.transcriptionSecondsUsed))
+                            .font(AppFont.mono(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                        
+                        Text("of \(formatUsedTime(subscription.currentTier.transcriptionLimitSeconds))")
+                            .font(AppFont.mono(size: 12, weight: .regular))
+                            .foregroundStyle(.gray)
+                        
+                        Spacer()
+                        
+                        Text(subscription.remainingTranscriptionLabel)
+                            .font(AppFont.mono(size: 11, weight: .medium))
+                            .foregroundStyle(progressColor)
+                    }
                 }
             }
         }
@@ -479,12 +509,14 @@ struct UpgradePromptView: View {
 }
 
 enum UpgradeReason {
+    case transcriptionLocked
     case transcriptionLimit
     case historyLimit
     case featureLocked(String)
     
     var icon: String {
         switch self {
+        case .transcriptionLocked: return "lock.fill"
         case .transcriptionLimit: return "clock.badge.exclamationmark"
         case .historyLimit: return "doc.badge.clock"
         case .featureLocked: return "lock"
@@ -493,6 +525,7 @@ enum UpgradeReason {
     
     var title: String {
         switch self {
+        case .transcriptionLocked: return "Transcription Locked"
         case .transcriptionLimit: return "Transcription Limit Reached"
         case .historyLimit: return "History Limit Reached"
         case .featureLocked(let feature): return "\(feature) is a Premium Feature"
@@ -501,10 +534,12 @@ enum UpgradeReason {
     
     var message: String {
         switch self {
+        case .transcriptionLocked:
+            return "Upgrade to unlock AI transcription and convert your recordings to searchable text."
         case .transcriptionLimit:
             return "You've used all your transcription hours this month. Upgrade to continue transcribing."
         case .historyLimit:
-            return "Free accounts can only keep 5 transcripts. Upgrade for unlimited history."
+            return "Free accounts can only keep 5 recordings. Upgrade for unlimited history."
         case .featureLocked(let feature):
             return "Upgrade to Standard or Pro to unlock \(feature)."
         }
@@ -518,27 +553,46 @@ struct UsageBadgeView: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            // Progress ring
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.1), lineWidth: 3)
+            if subscription.currentTier == .free {
+                // Free tier - show lock icon
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 24, height: 24)
                 
-                Circle()
-                    .trim(from: 0, to: subscription.usagePercentage)
-                    .stroke(progressColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
-            .frame(width: 24, height: 24)
-            
-            VStack(alignment: .leading, spacing: 1) {
-                Text(subscription.currentTier.displayName.uppercased())
-                    .font(AppFont.mono(size: 9, weight: .bold))
-                    .kerning(1.0)
-                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("FREE")
+                        .font(AppFont.mono(size: 9, weight: .bold))
+                        .kerning(1.0)
+                        .foregroundStyle(.white)
+                    
+                    Text("Upgrade to transcribe")
+                        .font(AppFont.mono(size: 8, weight: .regular))
+                        .foregroundStyle(.gray)
+                }
+            } else {
+                // Subscribed tier - show progress ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 3)
+                    
+                    Circle()
+                        .trim(from: 0, to: subscription.usagePercentage)
+                        .stroke(progressColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 24, height: 24)
                 
-                Text(subscription.remainingTranscriptionLabel)
-                    .font(AppFont.mono(size: 8, weight: .regular))
-                    .foregroundStyle(.gray)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(subscription.currentTier.displayName.uppercased())
+                        .font(AppFont.mono(size: 9, weight: .bold))
+                        .kerning(1.0)
+                        .foregroundStyle(.white)
+                    
+                    Text(subscription.remainingTranscriptionLabel)
+                        .font(AppFont.mono(size: 8, weight: .regular))
+                        .foregroundStyle(.gray)
+                }
             }
         }
         .padding(.horizontal, 12)

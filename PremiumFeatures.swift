@@ -633,6 +633,8 @@ struct FeatureGate {
     static func canAccess(_ feature: PremiumFeature) -> Bool {
         let tier = SubscriptionManager.shared.currentTier
         switch feature {
+        case .transcription:
+            return tier == .standard || tier == .pro
         case .audioUpload:
             return tier == .standard || tier == .pro
         case .exportPDF, .exportMarkdown:
@@ -654,7 +656,7 @@ struct FeatureGate {
     
     static func requiredTier(for feature: PremiumFeature) -> SubscriptionTier {
         switch feature {
-        case .audioUpload, .exportPDF, .exportMarkdown, .speakerIdentification, .unlimitedHistory:
+        case .transcription, .audioUpload, .exportPDF, .exportMarkdown, .speakerIdentification, .unlimitedHistory:
             return .standard
         case .askYourAudio, .audioSearch, .priorityProcessing, .longFileUpload:
             return .pro
@@ -663,6 +665,7 @@ struct FeatureGate {
 }
 
 enum PremiumFeature {
+    case transcription
     case audioUpload
     case exportPDF
     case exportMarkdown
@@ -675,6 +678,7 @@ enum PremiumFeature {
     
     var displayName: String {
         switch self {
+        case .transcription: return "AI Transcription"
         case .audioUpload: return "Audio Upload"
         case .exportPDF: return "Export to PDF"
         case .exportMarkdown: return "Export to Markdown"

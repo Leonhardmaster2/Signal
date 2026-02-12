@@ -497,14 +497,20 @@ struct DecodedView: View {
                     Button {
                         transcribe()
                     } label: {
-                        Text("TRANSCRIBE")
-                            .font(AppFont.mono(size: 11, weight: .bold))
-                            .kerning(1.5)
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color.white)
-                            .clipShape(Capsule())
+                        HStack(spacing: 6) {
+                            if !SubscriptionManager.shared.canTranscribeAtAll {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 10))
+                            }
+                            Text(SubscriptionManager.shared.canTranscribeAtAll ? "TRANSCRIBE" : "UNLOCK TRANSCRIPTION")
+                                .font(AppFont.mono(size: 11, weight: .bold))
+                                .kerning(1.5)
+                        }
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.white)
+                        .clipShape(Capsule())
                     }
                 } else if !recording.hasSummary {
                     Button {
@@ -1240,10 +1246,10 @@ struct DecodedView: View {
                 )
             } else {
                 callToAction(
-                    icon: "waveform.badge.magnifyingglass",
-                    title: "NOT YET DECODED",
-                    subtitle: "Transcribe this recording to extract signals.",
-                    action: ("TRANSCRIBE", transcribe)
+                    icon: SubscriptionManager.shared.canTranscribeAtAll ? "waveform.badge.magnifyingglass" : "lock.fill",
+                    title: SubscriptionManager.shared.canTranscribeAtAll ? "NOT YET DECODED" : "TRANSCRIPTION LOCKED",
+                    subtitle: SubscriptionManager.shared.canTranscribeAtAll ? "Transcribe this recording to extract signals." : "Upgrade to unlock AI transcription and summaries.",
+                    action: (SubscriptionManager.shared.canTranscribeAtAll ? "TRANSCRIBE" : "UNLOCK TRANSCRIPTION", transcribe)
                 )
             }
         }
@@ -1333,10 +1339,10 @@ struct DecodedView: View {
                 )
             } else {
                 callToAction(
-                    icon: "text.alignleft",
-                    title: "NO TRANSCRIPT",
-                    subtitle: "Transcribe this recording first.",
-                    action: ("TRANSCRIBE", transcribe)
+                    icon: SubscriptionManager.shared.canTranscribeAtAll ? "text.alignleft" : "lock.fill",
+                    title: SubscriptionManager.shared.canTranscribeAtAll ? "NO TRANSCRIPT" : "TRANSCRIPTION LOCKED",
+                    subtitle: SubscriptionManager.shared.canTranscribeAtAll ? "Transcribe this recording first." : "Upgrade to unlock AI transcription.",
+                    action: (SubscriptionManager.shared.canTranscribeAtAll ? "TRANSCRIBE" : "UNLOCK TRANSCRIPTION", transcribe)
                 )
             }
         }
@@ -1884,22 +1890,21 @@ struct DecodedView: View {
 
     private func transcribe() {
         guard recording.audioURL != nil else { return }
-        
-        // Debug logging
-        let onDeviceAvailable = OnDeviceTranscriptionService.shared.isOnDeviceAvailable
-        print("🔍 [Transcribe] On-device available: \(onDeviceAvailable)")
-        print("🔍 [Transcribe] Current locale: \(OnDeviceTranscriptionService.shared.currentLanguageCode)")
-        
-        // Always show chooser if on-device transcription is available on this device
-        // (even if not for the current preferred language - user can choose cloud or on-device)
-        if onDeviceAvailable {
-            print("✅ [Transcribe] Showing chooser")
+
+        // Check if user is subscribed (free users must upgrade to transcribe)
+        let subscription = SubscriptionManager.shared
+        if !subscription.canTranscribeAtAll {
+            showPaywall = true
+            return
+        }
+
+        // Check if on-device transcription is available for preferred language - if so, show chooser
+        if OnDeviceTranscriptionService.shared.isOnDeviceAvailableForPreferredLanguage {
             showTranscriptionChooser = true
             return
         }
-        
+
         // Otherwise, use cloud transcription directly
-        print("❌ [Transcribe] Going directly to cloud")
         performTranscription(useOnDevice: false)
     }
     
