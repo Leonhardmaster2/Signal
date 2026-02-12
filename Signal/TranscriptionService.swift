@@ -230,13 +230,23 @@ final class TranscriptionService {
     ///   - progressFraction: Callback for progress (0.0 to 1.0)
     func transcribeAuto(fileURL: URL, diarize: Bool = true, forceOnDevice: Bool? = nil, progressHandler: ((String) -> Void)? = nil, progressFraction: ((Double) -> Void)? = nil) async throws -> TranscriptionResult {
         let useOnDeviceForThis = forceOnDevice ?? shouldUseOnDevice
+        
+        print("🎯 [TranscriptionService] transcribeAuto called")
+        print("🎯 [TranscriptionService] forceOnDevice: \(String(describing: forceOnDevice))")
+        print("🎯 [TranscriptionService] shouldUseOnDevice: \(shouldUseOnDevice)")
+        print("🎯 [TranscriptionService] useOnDeviceForThis: \(useOnDeviceForThis)")
+        print("🎯 [TranscriptionService] useOnDevice setting: \(useOnDevice)")
+        print("🎯 [TranscriptionService] isOnDeviceAvailable: \(OnDeviceTranscriptionService.shared.isOnDeviceAvailable)")
+        
         if useOnDeviceForThis {
+            print("✅ [TranscriptionService] Using ON-DEVICE transcription")
             // Use on-device transcription
             let onDeviceService = OnDeviceTranscriptionService.shared
             
             let response: ScribeResponse
             
             if useAutoLanguageDetection {
+                print("🌍 [TranscriptionService] Using automatic language detection")
                 // Use automatic language detection
                 response = try await onDeviceService.transcribeWithLanguageDetection(
                     fileURL: fileURL,
@@ -245,6 +255,7 @@ final class TranscriptionService {
                     progressFraction: progressFraction
                 )
             } else {
+                print("🗣️ [TranscriptionService] Using preferred language: \(preferredLanguage)")
                 // Use preferred language directly
                 onDeviceService.setLanguage(preferredLanguage)
                 response = try await onDeviceService.transcribe(
@@ -255,6 +266,7 @@ final class TranscriptionService {
             }
             
             let transcript = onDeviceService.buildTranscript(from: response)
+            print("✅ [TranscriptionService] On-device transcription completed")
             return TranscriptionResult(
                 response: response,
                 transcript: transcript,
@@ -262,9 +274,11 @@ final class TranscriptionService {
                 detectedLanguage: response.language_code
             )
         } else {
+            print("☁️ [TranscriptionService] Using CLOUD transcription (ElevenLabs)")
             // Use cloud transcription (ElevenLabs) - it has its own language detection
             let response = try await transcribe(fileURL: fileURL, diarize: diarize)
             let transcript = buildTranscript(from: response)
+            print("✅ [TranscriptionService] Cloud transcription completed")
             return TranscriptionResult(
                 response: response,
                 transcript: transcript,

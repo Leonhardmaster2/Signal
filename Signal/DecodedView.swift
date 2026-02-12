@@ -170,10 +170,20 @@ struct DecodedView: View {
             TranscriptionMethodChooser(
                 recordingDuration: recording.duration,
                 onChooseApple: {
-                    performTranscription(useOnDevice: true)
+                    // Dismiss sheet first, then start transcription after a brief delay
+                    // This ensures the progress UI is visible
+                    showTranscriptionChooser = false
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        performTranscription(useOnDevice: true)
+                    }
                 },
                 onChooseAPI: {
-                    performTranscription(useOnDevice: false)
+                    showTranscriptionChooser = false
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        performTranscription(useOnDevice: false)
+                    }
                 }
             )
         }
@@ -1875,18 +1885,28 @@ struct DecodedView: View {
     private func transcribe() {
         guard recording.audioURL != nil else { return }
         
-        // Check if on-device transcription is available for preferred language - if so, show chooser
-        if OnDeviceTranscriptionService.shared.isOnDeviceAvailableForPreferredLanguage {
+        // Debug logging
+        let onDeviceAvailable = OnDeviceTranscriptionService.shared.isOnDeviceAvailable
+        print("🔍 [Transcribe] On-device available: \(onDeviceAvailable)")
+        print("🔍 [Transcribe] Current locale: \(OnDeviceTranscriptionService.shared.currentLanguageCode)")
+        
+        // Always show chooser if on-device transcription is available on this device
+        // (even if not for the current preferred language - user can choose cloud or on-device)
+        if onDeviceAvailable {
+            print("✅ [Transcribe] Showing chooser")
             showTranscriptionChooser = true
             return
         }
         
         // Otherwise, use cloud transcription directly
+        print("❌ [Transcribe] Going directly to cloud")
         performTranscription(useOnDevice: false)
     }
     
     private func performTranscription(useOnDevice: Bool) {
         guard let url = recording.audioURL else { return }
+        
+        print("🚀 [PerformTranscription] Starting with useOnDevice: \(useOnDevice)")
         
         // Check subscription limits (only for cloud)
         if !useOnDevice {
@@ -1894,6 +1914,7 @@ struct DecodedView: View {
             if !subscription.canTranscribe(duration: recording.duration) {
                 subscriptionLimitError = "You've reached your monthly transcription limit. Upgrade to continue."
                 showPaywall = true
+                print("❌ [PerformTranscription] Subscription limit reached")
                 return
             }
         }
@@ -1901,9 +1922,12 @@ struct DecodedView: View {
         recording.isTranscribing = true
         recording.transcriptionError = nil
         recording.transcriptionProgress = 0
+        
+        print("📝 [PerformTranscription] Set isTranscribing = true, starting Task")
 
         Task {
             do {
+                print("🔄 [PerformTranscription] Calling transcribeAuto with forceOnDevice: \(useOnDevice)")
                 let result = try await TranscriptionService.shared.transcribeAuto(
                     fileURL: url,
                     forceOnDevice: useOnDevice,
@@ -2532,7 +2556,7 @@ struct TranscriptionMethodChooser: View {
     @Environment(\.dismiss) private var dismiss
     
     private var subscription: SubscriptionManager { SubscriptionManager.shared }
-    private var isOnDeviceAvailable: Bool { OnDeviceTranscriptionService.shared.isOnDeviceAvailableForPreferredLanguage }
+    private var isOnDeviceAvailable: Bool { OnDeviceTranscriptionService.shared.isOnDeviceAvailable }
     
     var body: some View {
         NavigationStack {
@@ -2558,7 +2582,6 @@ struct TranscriptionMethodChooser: View {
                 VStack(spacing: 12) {
                     // Apple On-Device Option
                     Button {
-                        dismiss()
                         onChooseApple()
                     } label: {
                         VStack(alignment: .leading, spacing: 12) {
@@ -2617,7 +2640,6 @@ struct TranscriptionMethodChooser: View {
                     
                     // ElevenLabs API Option
                     Button {
-                        dismiss()
                         onChooseAPI()
                     } label: {
                         VStack(alignment: .leading, spacing: 12) {

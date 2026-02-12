@@ -229,6 +229,9 @@ final class OnDeviceTranscriptionService {
     /// Automatically chunks long audio files to work around Apple's ~60s limit
     /// Supports background execution - transcription continues even when app is backgrounded
     func transcribe(fileURL: URL, progressHandler: ((String) -> Void)? = nil, progressFraction: ((Double) -> Void)? = nil) async throws -> ScribeResponse {
+        print("📱 [OnDeviceTranscription] transcribe() called")
+        print("📱 [OnDeviceTranscription] File URL: \(fileURL.path)")
+        
         // Reset cancellation flag
         isCancelled = false
 
@@ -244,6 +247,7 @@ final class OnDeviceTranscriptionService {
 
         // Check authorization
         let status = await requestAuthorization()
+        print("📱 [OnDeviceTranscription] Authorization status: \(status.rawValue)")
         guard status == .authorized else {
             endBackgroundTask()
             throw OnDeviceTranscriptionError.notAuthorized
@@ -251,18 +255,23 @@ final class OnDeviceTranscriptionService {
 
         // Check recognizer availability
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+            print("❌ [OnDeviceTranscription] Recognizer not available")
             endBackgroundTask()
             throw OnDeviceTranscriptionError.notAvailable
         }
+        print("📱 [OnDeviceTranscription] Recognizer available: \(recognizer.locale.identifier)")
 
         // Check on-device support
         guard recognizer.supportsOnDeviceRecognition else {
+            print("❌ [OnDeviceTranscription] On-device not supported for locale")
             endBackgroundTask()
             throw OnDeviceTranscriptionError.onDeviceNotSupported
         }
+        print("📱 [OnDeviceTranscription] On-device supported: ✅")
 
         // Check file exists
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            print("❌ [OnDeviceTranscription] File not found")
             endBackgroundTask()
             throw OnDeviceTranscriptionError.fileNotFound
         }
@@ -275,12 +284,14 @@ final class OnDeviceTranscriptionService {
         } else {
             audioDuration = 0
         }
+        print("📱 [OnDeviceTranscription] Audio duration: \(audioDuration)s")
         
         do {
             let result: ScribeResponse
             
             // If short enough, transcribe directly (no chunking needed)
             if audioDuration > 0 && audioDuration <= maxChunkDuration {
+                print("📱 [OnDeviceTranscription] Audio ≤ \(maxChunkDuration)s, using single chunk")
                 result = try await transcribeSingleChunk(
                     fileURL: fileURL,
                     recognizer: recognizer,
@@ -294,6 +305,7 @@ final class OnDeviceTranscriptionService {
                 )
             } else {
                 // For longer files, chunk and transcribe sequentially
+                print("📱 [OnDeviceTranscription] Audio > \(maxChunkDuration)s (\(audioDuration)s), using chunked transcription")
                 result = try await transcribeChunked(
                     fileURL: fileURL,
                     recognizer: recognizer,
@@ -306,9 +318,15 @@ final class OnDeviceTranscriptionService {
                 )
             }
             
+            print("✅ [OnDeviceTranscription] Transcription complete!")
+            print("📊 [OnDeviceTranscription] Text length: \(result.text.count) characters")
+            print("📊 [OnDeviceTranscription] Word count: \(result.words?.count ?? 0) words")
+            print("📊 [OnDeviceTranscription] First 200 chars: \(String(result.text.prefix(200)))")
+            
             endBackgroundTask()
             return result
         } catch {
+            print("❌ [OnDeviceTranscription] Error: \(error)")
             endBackgroundTask()
             throw error
         }
@@ -472,6 +490,11 @@ final class OnDeviceTranscriptionService {
             currentStart += maxChunkDuration - chunkOverlap
             if currentStart >= audioDuration { break }
         }
+        
+        print("🔪 [Chunking] Total chunks: \(chunks.count)")
+        for (i, chunk) in chunks.enumerated() {
+            print("🔪 [Chunking] Chunk \(i): \(chunk.start)s - \(chunk.end)s (\(chunk.end - chunk.start)s)")
+        }
 
         // Create temp directory for chunk files
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("signal_chunks_\(UUID().uuidString)")
@@ -486,22 +509,29 @@ final class OnDeviceTranscriptionService {
         var languageProb: Double?
 
         for (index, chunk) in chunks.enumerated() {
+            print("🔄 [Chunk \(index+1)/\(chunks.count)] Processing \(chunk.start)s - \(chunk.end)s")
+            
             // Check cancellation
             guard !isCancelled else {
+                print("❌ [Chunk \(index+1)/\(chunks.count)] Cancelled")
                 throw OnDeviceTranscriptionError.cancelled
             }
 
             // Export this chunk to a temporary file
             let chunkURL = tempDir.appendingPathComponent("chunk_\(index).m4a")
+            print("📝 [Chunk \(index+1)/\(chunks.count)] Exporting audio chunk...")
             try await exportAudioChunk(from: fileURL, to: chunkURL, startTime: chunk.start, endTime: chunk.end)
+            print("✅ [Chunk \(index+1)/\(chunks.count)] Audio chunk exported")
 
             // Check cancellation after export
             guard !isCancelled else {
+                print("❌ [Chunk \(index+1)/\(chunks.count)] Cancelled after export")
                 throw OnDeviceTranscriptionError.cancelled
             }
 
             // Transcribe this chunk
             let chunkDuration = chunk.end - chunk.start
+            print("🎤 [Chunk \(index+1)/\(chunks.count)] Starting transcription...")
             let chunkResponse = try await transcribeSingleChunk(
                 fileURL: chunkURL,
                 recognizer: recognizer,
@@ -520,6 +550,7 @@ final class OnDeviceTranscriptionService {
                     progressFraction?(min(1.0, overall))
                 }
             )
+            print("✅ [Chunk \(index+1)/\(chunks.count)] Transcribed: \(chunkResponse.text.count) chars, \(chunkResponse.words?.count ?? 0) words")
 
             // Merge results — offset word timestamps by chunk start time
             if let words = chunkResponse.words {
@@ -537,14 +568,17 @@ final class OnDeviceTranscriptionService {
                 // If there's overlap with previous chunk, deduplicate
                 if index > 0 && !allWords.isEmpty && !adjustedWords.isEmpty {
                     let overlapWords = deduplicateOverlap(existing: allWords, incoming: adjustedWords, overlapStart: chunk.start)
+                    print("🔀 [Chunk \(index+1)/\(chunks.count)] Deduplicated overlap: \(allWords.count) + \(adjustedWords.count) → \(overlapWords.count) words")
                     allWords = overlapWords
                 } else {
+                    print("➕ [Chunk \(index+1)/\(chunks.count)] Adding \(adjustedWords.count) words")
                     allWords.append(contentsOf: adjustedWords)
                 }
             }
 
             // Build full text from all words so far
             allText = allWords.map { $0.text }.joined().trimmingCharacters(in: .whitespaces)
+            print("📊 [Chunk \(index+1)/\(chunks.count)] Total so far: \(allText.count) chars, \(allWords.count) words")
 
             if languageCode == nil { languageCode = chunkResponse.language_code }
             if languageProb == nil { languageProb = chunkResponse.language_probability }
@@ -583,6 +617,56 @@ final class OnDeviceTranscriptionService {
         return try await withCheckedThrowingContinuation { continuation in
             var words: [ScribeWord] = []
             var hasResumed = false
+            var lastResult: SFSpeechRecognitionResult?
+            var bestResult: SFSpeechRecognitionResult? // Track the longest result we've seen
+            var maxSegmentCount = 0
+            
+            // Timeout mechanism: if we don't get isFinal within reasonable time, use last result
+            // This works around a bug where some audio files never get marked as final
+            let timeoutDuration = max(audioDuration + 5.0, 70.0) // Audio duration + 5s buffer, minimum 70s
+            print("⏱️ [SingleChunk] Timeout set to \(timeoutDuration)s")
+            
+            let timeoutTask = Task {
+                try? await Task.sleep(for: .seconds(timeoutDuration))
+                guard !hasResumed else { return }
+                
+                print("⏱️ [SingleChunk] TIMEOUT reached! Using last result")
+                
+                // If we have partial results but never got isFinal, use the best result we saw
+                // Prefer bestResult (longest) over lastResult if available
+                let resultToUse = bestResult ?? lastResult
+                if let result = resultToUse {
+                    hasResumed = true
+                    self.activeTask?.cancel()
+                    self.activeTask = nil
+                    
+                    print("⏱️ [SingleChunk] Using \(bestResult != nil ? "best" : "last") result with \(result.bestTranscription.segments.count) segments (max seen: \(maxSegmentCount))")
+                    
+                    var finalWords: [ScribeWord] = []
+                    for segment in result.bestTranscription.segments {
+                        let word = ScribeWord(
+                            text: segment.substring + " ",
+                            start: segment.timestamp,
+                            end: segment.timestamp + segment.duration,
+                            type: "word",
+                            speaker_id: nil
+                        )
+                        finalWords.append(word)
+                    }
+                    
+                    let response = ScribeResponse(
+                        language_code: Locale.current.language.languageCode?.identifier,
+                        language_probability: Double(result.bestTranscription.segments.first?.confidence ?? 0),
+                        text: result.bestTranscription.formattedString,
+                        words: finalWords
+                    )
+                    
+                    print("⏱️ [SingleChunk] Returning \(response.text.count) chars via timeout")
+                    continuation.resume(returning: response)
+                } else {
+                    print("❌ [SingleChunk] Timeout but no result available!")
+                }
+            }
 
             let task = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 guard let self else { return }
@@ -590,6 +674,7 @@ final class OnDeviceTranscriptionService {
 
                 if let error = error {
                     hasResumed = true
+                    timeoutTask.cancel()
                     self.activeTask = nil
                     let nsError = error as NSError
                     if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 216 {
@@ -603,6 +688,17 @@ final class OnDeviceTranscriptionService {
                 }
 
                 if let result = result {
+                    // Store the latest result for timeout fallback
+                    lastResult = result
+                    
+                    // Track the best (longest) result we've seen
+                    let segmentCount = result.bestTranscription.segments.count
+                    if segmentCount > maxSegmentCount {
+                        maxSegmentCount = segmentCount
+                        bestResult = result
+                        print("🔝 [SingleChunk] New best result: \(segmentCount) segments")
+                    }
+                    
                     progressHandler?(result.bestTranscription.formattedString)
 
                     if audioDuration > 0, let lastSegment = result.bestTranscription.segments.last {
@@ -611,10 +707,16 @@ final class OnDeviceTranscriptionService {
                     }
 
                     if result.isFinal {
+                        print("✅ [SingleChunk] Got isFinal! Current result: \(result.bestTranscription.segments.count) segments")
                         hasResumed = true
+                        timeoutTask.cancel()
                         self.activeTask = nil
 
-                        for segment in result.bestTranscription.segments {
+                        // Use the best result we've seen, not the potentially incomplete final result
+                        let resultToUse = bestResult ?? result
+                        print("🎯 [SingleChunk] Using result with \(resultToUse.bestTranscription.segments.count) segments (best: \(maxSegmentCount))")
+
+                        for segment in resultToUse.bestTranscription.segments {
                             let word = ScribeWord(
                                 text: segment.substring + " ",
                                 start: segment.timestamp,
@@ -627,12 +729,15 @@ final class OnDeviceTranscriptionService {
 
                         let response = ScribeResponse(
                             language_code: Locale.current.language.languageCode?.identifier,
-                            language_probability: Double(result.bestTranscription.segments.first?.confidence ?? 0),
-                            text: result.bestTranscription.formattedString,
+                            language_probability: Double(resultToUse.bestTranscription.segments.first?.confidence ?? 0),
+                            text: resultToUse.bestTranscription.formattedString,
                             words: words
                         )
 
+                        print("✅ [SingleChunk] Returning \(response.text.count) chars via isFinal")
                         continuation.resume(returning: response)
+                    } else {
+                        print("⏳ [SingleChunk] Partial result: \(result.bestTranscription.segments.count) segments so far")
                     }
                 }
             }
