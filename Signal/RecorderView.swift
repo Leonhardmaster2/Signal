@@ -14,6 +14,7 @@ struct RecorderView: View {
     @State private var phase: CGFloat = 0
     @State private var displayAmplitude: CGFloat = 0.05
     @State private var permissionDenied = false
+    @State private var errorMessage = ""
     @State private var isSaving = false
     @State private var savedRecording: Recording?
     @State private var showOverview = false
@@ -60,15 +61,19 @@ struct RecorderView: View {
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .alert("Microphone Access Required", isPresented: $permissionDenied) {
-            Button("Settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
+        .alert("Recording Error", isPresented: $permissionDenied) {
+            if errorMessage.contains("not authorized") || errorMessage.contains("permission") {
+                Button("Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
                 }
+                Button("Cancel", role: .cancel) { dismiss() }
+            } else {
+                Button("OK", role: .cancel) { dismiss() }
             }
-            Button("Cancel", role: .cancel) { dismiss() }
         } message: {
-            Text("Signal needs microphone access to record meetings. Enable it in Settings.")
+            Text(errorMessage.isEmpty ? "Signal needs microphone access to record. Enable it in Settings." : errorMessage)
         }
         .alert("Discard Recording?", isPresented: $showDiscardAlert) {
             Button("Discard", role: .destructive) {
@@ -311,11 +316,23 @@ struct RecorderView: View {
         Task {
             let granted = await recorder.requestPermission()
             guard granted else {
+                errorMessage = "Microphone access is required to record. Please enable it in Settings."
                 permissionDenied = true
                 return
             }
-            try await recorder.startRecording()
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            do {
+                try await recorder.startRecording(source: .external)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } catch {
+                print("Failed to start recording: \(error)")
+                // Provide a more helpful error message
+                if error.localizedDescription.contains("not authorized") {
+                    errorMessage = "Microphone access is required. Please enable it in Settings."
+                } else {
+                    errorMessage = "Failed to start recording: \(error.localizedDescription). Please try again or check your device's microphone."
+                }
+                permissionDenied = true
+            }
         }
     }
 
@@ -495,6 +512,8 @@ private struct WaveCanvas: View {
                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
     }
 }
+
+
 
 #Preview {
     RecorderView()

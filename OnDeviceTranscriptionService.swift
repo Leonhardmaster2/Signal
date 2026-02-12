@@ -756,18 +756,14 @@ final class OnDeviceTranscriptionService {
             throw OnDeviceTranscriptionError.audioProcessingFailed
         }
 
-        exportSession.outputURL = destinationURL
-        exportSession.outputFileType = .m4a
-
         let start = CMTime(seconds: startTime, preferredTimescale: 44100)
         let end = CMTime(seconds: endTime, preferredTimescale: 44100)
         exportSession.timeRange = CMTimeRange(start: start, end: end)
 
-        await exportSession.export()
-
-        guard exportSession.status == .completed else {
-            let errorMsg = exportSession.error?.localizedDescription ?? "Unknown export error"
-            throw OnDeviceTranscriptionError.recognitionFailed("Audio chunk export failed: \(errorMsg)")
+        do {
+            try await exportSession.export(to: destinationURL, as: .m4a)
+        } catch {
+            throw OnDeviceTranscriptionError.recognitionFailed("Audio chunk export failed: \(error.localizedDescription)")
         }
     }
 

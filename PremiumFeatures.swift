@@ -139,9 +139,38 @@ final class ExportService {
                 .foregroundColor: UIColor.black
             ]
             
-            var yPosition: CGFloat = 50
+            let brandingAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.monospacedSystemFont(ofSize: 9, weight: .medium),
+                .foregroundColor: UIColor.darkGray
+            ]
+            
+            var yPosition: CGFloat = 40
             let margin: CGFloat = 50
             let maxWidth = pageRect.width - (margin * 2)
+            
+            // Signal Logo at top
+            if let logoImage = UIImage(named: "SignalLogoBlackNoBG") {
+                let logoHeight: CGFloat = 30
+                let logoAspectRatio = logoImage.size.width / logoImage.size.height
+                let logoWidth = logoHeight * logoAspectRatio
+                let logoRect = CGRect(x: margin, y: yPosition, width: logoWidth, height: logoHeight)
+                logoImage.draw(in: logoRect)
+                
+                // "Transcribed with Signal" text next to logo
+                let brandingText = "Transcribed with Signal" as NSString
+                let brandingX = margin + logoWidth + 12
+                brandingText.draw(at: CGPoint(x: brandingX, y: yPosition + 10), withAttributes: brandingAttributes)
+            }
+            
+            yPosition += 50
+            
+            // Separator line
+            context.cgContext.setStrokeColor(UIColor.lightGray.cgColor)
+            context.cgContext.setLineWidth(0.5)
+            context.cgContext.move(to: CGPoint(x: margin, y: yPosition))
+            context.cgContext.addLine(to: CGPoint(x: pageRect.width - margin, y: yPosition))
+            context.cgContext.strokePath()
+            yPosition += 20
             
             // Title
             let title = recording.title as NSString
@@ -180,6 +209,7 @@ final class ExportService {
                 yPosition += 25
                 
                 let speakerNames = recording.speakerNames ?? [:]
+                var previousSpeaker: String? = nil
                 
                 for segment in segments.prefix(20) { // Limit for PDF
                     if yPosition > pageRect.height - 100 {
@@ -188,12 +218,37 @@ final class ExportService {
                     }
                     
                     let speaker = speakerNames[segment.speaker] ?? segment.speaker
+                    
+                    // Add extra spacing when speaker changes
+                    if let prev = previousSpeaker, prev != speaker {
+                        yPosition += 15
+                    }
+                    
                     let line = "[\(segment.timestamp.formatted)] \(speaker): \(segment.text)" as NSString
                     let lineRect = CGRect(x: margin, y: yPosition, width: maxWidth, height: 60)
                     line.draw(in: lineRect, withAttributes: bodyAttributes)
                     yPosition += 50
+                    
+                    previousSpeaker = speaker
                 }
             }
+            
+            // Footer with branding at bottom of last page
+            let footerY = pageRect.height - 60
+            context.cgContext.setStrokeColor(UIColor.lightGray.cgColor)
+            context.cgContext.setLineWidth(0.5)
+            context.cgContext.move(to: CGPoint(x: margin, y: footerY))
+            context.cgContext.addLine(to: CGPoint(x: pageRect.width - margin, y: footerY))
+            context.cgContext.strokePath()
+            
+            let footerText = "Transcribed with Signal • signal.app" as NSString
+            let footerAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.monospacedSystemFont(ofSize: 8, weight: .regular),
+                .foregroundColor: UIColor.lightGray
+            ]
+            let footerSize = footerText.size(withAttributes: footerAttributes)
+            let footerX = (pageRect.width - footerSize.width) / 2
+            footerText.draw(at: CGPoint(x: footerX, y: footerY + 8), withAttributes: footerAttributes)
         }
         
         return data
@@ -328,55 +383,83 @@ struct AskYourAudioView: View {
     }
     
     private func askAboutTranscript(question: String) async throws -> String {
-        // This would call the AI service with the transcript context
-        // For now, we'll use a simulated response based on the transcript
-        
         guard let transcript = recording.transcriptFullText else {
             return "No transcript available for this recording."
         }
         
-        // In production, this would call Gemini/OpenAI API
-        // For demo purposes, provide context-aware responses
-        try await Task.sleep(for: .seconds(1.5))
-        
-        let lowercaseQuestion = question.lowercased()
-        
-        if lowercaseQuestion.contains("summary") || lowercaseQuestion.contains("about") {
-            if let summary = recording.summary {
-                return "Based on the recording: \(summary.oneLiner)\n\n\(summary.context)"
-            } else {
-                return "This recording discusses: \(String(transcript.prefix(200)))..."
-            }
+        // Load Gemini API key from Secrets.plist
+        guard let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
+              let secrets = NSDictionary(contentsOfFile: path),
+              let apiKey = secrets["GEMINI_API_KEY"] as? String else {
+            return "API configuration error. Please check your settings."
         }
         
-        if lowercaseQuestion.contains("action") || lowercaseQuestion.contains("todo") || lowercaseQuestion.contains("task") {
-            if let actions = recording.summaryActions, !actions.isEmpty {
-                var response = "Here are the action items from this recording:\n\n"
-                for (index, action) in actions.enumerated() {
-                    response += "\(index + 1). \(action.task) (assigned to \(action.assignee))\n"
-                }
-                return response
-            } else {
-                return "I didn't find any specific action items in this recording."
-            }
+        // Prepare the Gemini API request
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=\(apiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Create a focused system prompt
+        let systemPrompt = """
+        You are analyzing an audio transcript. Answer questions directly and concisely based ONLY on the transcript content.
+        - Be brief and to the point
+        - Don't add extra commentary or suggestions
+        - If the answer isn't in the transcript, say so clearly
+        - Don't ask follow-up questions
+        """
+        
+        let userPrompt = """
+        Transcript:
+        \(transcript)
+        
+        Question: \(question)
+        
+        Answer based only on the transcript above. Be direct and concise.
+        """
+        
+        let requestBody: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": systemPrompt],
+                        ["text": userPrompt]
+                    ]
+                ]
+            ],
+            "generationConfig": [
+                "temperature": 0.3,
+                "maxOutputTokens": 500,
+                "topP": 0.95,
+                "topK": 40
+            ]
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        // Make the API call
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return "Network error occurred."
         }
         
-        if lowercaseQuestion.contains("speaker") || lowercaseQuestion.contains("who") {
-            let speakers = recording.uniqueSpeakers
-            if speakers.isEmpty {
-                return "Speaker identification is not available for this recording."
-            }
-            let speakerNames = recording.speakerNames ?? [:]
-            let speakerList = speakers.map { speakerNames[$0] ?? $0 }.joined(separator: ", ")
-            return "The speakers in this recording are: \(speakerList)"
+        guard httpResponse.statusCode == 200 else {
+            return "API error: Unable to process your question at this time."
         }
         
-        if lowercaseQuestion.contains("long") || lowercaseQuestion.contains("duration") {
-            return "This recording is \(recording.duration.durationLabel) long."
+        // Parse the response
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let candidates = json["candidates"] as? [[String: Any]],
+              let firstCandidate = candidates.first,
+              let content = firstCandidate["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]],
+              let firstPart = parts.first,
+              let text = firstPart["text"] as? String else {
+            return "Unable to parse response. Please try again."
         }
         
-        // Generic response with transcript context
-        return "Based on the transcript, here's what I found relevant to your question:\n\n\(String(transcript.prefix(500)))...\n\nWould you like me to look for something more specific?"
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -631,10 +714,18 @@ struct SearchResultRow: View {
 
 struct FeatureGate {
     static func canAccess(_ feature: PremiumFeature) -> Bool {
-        let tier = SubscriptionManager.shared.currentTier
+        let tier = SubscriptionManager.shared.currentTier.baseLevel
+        let subscription = SubscriptionManager.shared
+        
         switch feature {
         case .transcription:
-            return tier == .standard || tier == .pro
+            return true  // Everyone can transcribe (free: 15min, paid: more)
+        case .aiSummarization:
+            return tier == .standard || tier == .pro  // Free tier: no AI analysis
+        case .onDeviceTranscription:
+            return subscription.hasOnDeviceAccess  // Privacy pack or Standard+
+        case .onDeviceSummarization:
+            return subscription.hasOnDeviceAccess  // Privacy pack or Standard+
         case .audioUpload:
             return tier == .standard || tier == .pro
         case .exportPDF, .exportMarkdown:
@@ -656,16 +747,21 @@ struct FeatureGate {
     
     static func requiredTier(for feature: PremiumFeature) -> SubscriptionTier {
         switch feature {
-        case .transcription, .audioUpload, .exportPDF, .exportMarkdown, .speakerIdentification, .unlimitedHistory:
-            return .standard
+        case .transcription:
+            return .free  // Everyone can transcribe
+        case .aiSummarization, .onDeviceTranscription, .onDeviceSummarization, .audioUpload, .exportPDF, .exportMarkdown, .speakerIdentification, .unlimitedHistory:
+            return .standardMonthly
         case .askYourAudio, .audioSearch, .priorityProcessing, .longFileUpload:
-            return .pro
+            return .proMonthly
         }
     }
 }
 
 enum PremiumFeature {
     case transcription
+    case aiSummarization
+    case onDeviceTranscription
+    case onDeviceSummarization
     case audioUpload
     case exportPDF
     case exportMarkdown
@@ -679,6 +775,9 @@ enum PremiumFeature {
     var displayName: String {
         switch self {
         case .transcription: return "AI Transcription"
+        case .aiSummarization: return "AI Summarization"
+        case .onDeviceTranscription: return "On-Device Transcription"
+        case .onDeviceSummarization: return "On-Device Summarization"
         case .audioUpload: return "Audio Upload"
         case .exportPDF: return "Export to PDF"
         case .exportMarkdown: return "Export to Markdown"

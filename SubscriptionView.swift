@@ -16,7 +16,7 @@ struct SubscriptionOverviewView: View {
             usageCard
             
             // Upgrade button (if not Pro)
-            if subscription.currentTier != .pro {
+            if subscription.currentTier.baseLevel != .pro {
                 upgradeButton
             }
             
@@ -103,16 +103,16 @@ struct SubscriptionOverviewView: View {
                 }
                 
                 HStack(spacing: 12) {
-                    Image(systemName: "lock.fill")
+                    Image(systemName: "waveform")
                         .font(.system(size: 20))
                         .foregroundStyle(.white.opacity(0.5))
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Upgrade to Unlock")
+                        Text("15 min/month transcription")
                             .font(AppFont.mono(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                         
-                        Text("Record unlimited audio for free. Upgrade to transcribe with AI.")
+                        Text("Upgrade for AI analysis, unlimited on-device features, and more.")
                             .font(AppFont.mono(size: 11, weight: .regular))
                             .foregroundStyle(.gray)
                             .lineSpacing(2)
@@ -217,7 +217,8 @@ struct SubscriptionOverviewView: View {
 struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var subscription = SubscriptionManager.shared
-    @State private var selectedTier: SubscriptionTier = .standard
+    @State private var selectedTier: SubscriptionTier = .standardMonthly
+    @State private var isYearly = false
     @State private var isPurchasing = false
     @State private var errorMessage: String?
     
@@ -238,18 +239,65 @@ struct PaywallView: View {
                     }
                     .padding(.top, 20)
                     
-                    // Tier cards
+                    // Billing period toggle
                     VStack(spacing: 12) {
-                        ForEach(SubscriptionTier.allCases, id: \.self) { tier in
-                            TierCard(
-                                tier: tier,
-                                isSelected: selectedTier == tier,
-                                isCurrent: subscription.currentTier == tier,
-                                onSelect: { selectedTier = tier }
-                            )
+                        billingPeriodToggle
+                        
+                        if isYearly {
+                            Text("Save up to 33% with annual billing")
+                                .font(AppFont.mono(size: 11, weight: .medium))
+                                .foregroundStyle(.green)
                         }
                     }
                     .padding(.horizontal)
+                    
+                    // Tier cards (only show Free, Standard, Pro - period is handled by toggle)
+                    GlassEffectContainer(spacing: 12) {
+                        VStack(spacing: 12) {
+                            TierCard(
+                                tier: .free,
+                                isSelected: selectedTier == .free,
+                                isCurrent: subscription.currentTier == .free,
+                                onSelect: { selectedTier = .free }
+                            )
+                            
+                            TierCard(
+                                tier: isYearly ? .standardYearly : .standardMonthly,
+                                isSelected: selectedTier.baseLevel == .standard,
+                                isCurrent: subscription.currentTier.baseLevel == .standard,
+                                onSelect: { 
+                                    selectedTier = isYearly ? .standardYearly : .standardMonthly
+                                }
+                            )
+                            
+                            TierCard(
+                                tier: isYearly ? .proYearly : .proMonthly,
+                                isSelected: selectedTier.baseLevel == .pro,
+                                isCurrent: subscription.currentTier.baseLevel == .pro,
+                                onSelect: { 
+                                    selectedTier = isYearly ? .proYearly : .proMonthly
+                                }
+                            )
+                        }
+                        .padding(.horizontal)
+                    }
+                    .onChange(of: isYearly) { _, newValue in
+                        // Update selected tier when billing period changes
+                        switch selectedTier.baseLevel {
+                        case .standard:
+                            selectedTier = newValue ? .standardYearly : .standardMonthly
+                        case .pro:
+                            selectedTier = newValue ? .proYearly : .proMonthly
+                        case .free:
+                            break
+                        }
+                    }
+                    
+                    // Privacy Pack (One-time purchase) - only show if not already purchased
+                    if !subscription.usage.hasPrivacyPack {
+                        privacyPackCard
+                            .padding(.horizontal)
+                    }
                     
                     // Selected tier features
                     selectedTierFeatures
@@ -361,6 +409,143 @@ struct PaywallView: View {
             .lineSpacing(3)
     }
     
+    private var billingPeriodToggle: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 4) {
+                Button {
+                    withAnimation(.smooth(duration: 0.3)) {
+                        isYearly = false
+                    }
+                } label: {
+                    Text("MONTHLY")
+                        .font(AppFont.mono(size: 11, weight: .bold))
+                        .kerning(1.5)
+                        .foregroundStyle(isYearly ? .white.opacity(0.6) : .white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.glass)
+                .opacity(isYearly ? 0.5 : 1.0)
+                
+                Button {
+                    withAnimation(.smooth(duration: 0.3)) {
+                        isYearly = true
+                    }
+                } label: {
+                    Text("YEARLY")
+                        .font(AppFont.mono(size: 11, weight: .bold))
+                        .kerning(1.5)
+                        .foregroundStyle(isYearly ? .white : .white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.glass)
+                .opacity(isYearly ? 1.0 : 0.5)
+            }
+        }
+    }
+    
+    private var privacyPackCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("ONE-TIME PURCHASE")
+                .font(AppFont.mono(size: 10, weight: .medium))
+                .kerning(1.5)
+                .foregroundStyle(.gray)
+            
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "lock.shield.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(.green)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("PRIVACY PACK")
+                                    .font(AppFont.mono(size: 14, weight: .bold))
+                                    .foregroundStyle(.white)
+                                
+                                Text("Transcribe on your phone")
+                                    .font(AppFont.mono(size: 11))
+                                    .foregroundStyle(.gray)
+                            }
+                        }
+                        
+                        // Features
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.green)
+                                Text("2 hours of cloud transcription")
+                                    .font(AppFont.mono(size: 12))
+                                    .foregroundStyle(.white)
+                            }
+                            
+                            // Only show on-device features if device supports it
+                            if OnDeviceTranscriptionService.shared.isOnDeviceAvailable {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.green)
+                                    Text("Unlimited on-device transcription")
+                                        .font(AppFont.mono(size: 12))
+                                        .foregroundStyle(.white)
+                                }
+                                
+                                HStack(spacing: 8) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.green)
+                                    Text("Private AI summaries on your device")
+                                        .font(AppFont.mono(size: 12))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                        }
+                        .padding(.leading, 4)
+                    }
+                    
+                    Spacer()
+                    
+                    Text("$3")
+                        .font(AppFont.mono(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                
+                Button {
+                    purchasePrivacyPack()
+                } label: {
+                    HStack {
+                        if isPurchasing {
+                            ProgressView()
+                                .tint(.black)
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "cart.fill")
+                                .font(.system(size: 12))
+                            Text("BUY PRIVACY PACK")
+                                .font(AppFont.mono(size: 12, weight: .bold))
+                                .kerning(1.5)
+                        }
+                    }
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.green)
+                    .clipShape(Capsule())
+                }
+                .disabled(isPurchasing)
+            }
+            .padding(16)
+            .glassCard(radius: 12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.green.opacity(0.3), lineWidth: 1)
+            )
+        }
+    }
+    
     private func purchase() {
         guard !isPurchasing else { return }
         isPurchasing = true
@@ -369,6 +554,24 @@ struct PaywallView: View {
         Task {
             do {
                 let success = try await subscription.purchase(selectedTier)
+                if success {
+                    dismiss()
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isPurchasing = false
+        }
+    }
+    
+    private func purchasePrivacyPack() {
+        guard !isPurchasing else { return }
+        isPurchasing = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let success = try await subscription.purchaseCreditPack(.privacyPack)
                 if success {
                     dismiss()
                 }
@@ -389,7 +592,11 @@ struct TierCard: View {
     let onSelect: () -> Void
     
     var body: some View {
-        Button(action: onSelect) {
+        Button(action: {
+            withAnimation(.smooth(duration: 0.3)) {
+                onSelect()
+            }
+        }) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
@@ -404,19 +611,17 @@ struct TierCard: View {
                                 .foregroundStyle(.black)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.white)
-                                .clipShape(Capsule())
+                                .glassEffect(.regular.tint(.white), in: Capsule())
                         }
                         
-                        if tier == .standard && !isCurrent {
+                        if tier.baseLevel == .standard && !isCurrent {
                             Text("POPULAR")
                                 .font(AppFont.mono(size: 8, weight: .bold))
                                 .kerning(1.0)
                                 .foregroundStyle(.black)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.white.opacity(0.8))
-                                .clipShape(Capsule())
+                                .glassEffect(.regular.tint(.white.opacity(0.8)), in: Capsule())
                         }
                     }
                     
@@ -427,14 +632,28 @@ struct TierCard: View {
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(tier.monthlyPrice)
-                        .font(AppFont.mono(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                    
-                    Text(tier.transcriptionLimitLabel)
-                        .font(AppFont.mono(size: 10, weight: .regular))
-                        .foregroundStyle(.gray)
+                VStack(alignment: .trailing, spacing: 4) {
+                    if tier.isYearly {
+                        Text(tier.pricePerMonth)
+                            .font(AppFont.mono(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                        
+                        Text(tier.monthlyPrice)
+                            .font(AppFont.mono(size: 9, weight: .medium))
+                            .foregroundStyle(.gray)
+                        
+                        Text("billed yearly")
+                            .font(AppFont.mono(size: 8, weight: .regular))
+                            .foregroundStyle(.gray.opacity(0.7))
+                    } else {
+                        Text(tier.monthlyPrice)
+                            .font(AppFont.mono(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                        
+                        Text(tier.transcriptionLimitLabel)
+                            .font(AppFont.mono(size: 10, weight: .regular))
+                            .foregroundStyle(.gray)
+                    }
                 }
                 
                 // Selection indicator
@@ -452,14 +671,12 @@ struct TierCard: View {
                     .padding(.leading, 12)
             }
             .padding(16)
-            .background(isSelected ? Color.white.opacity(0.1) : Color.clear)
-            .glassCard(radius: 12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.white.opacity(0.5) : Color.clear, lineWidth: 1)
-            )
         }
         .buttonStyle(.plain)
+        .glassEffect(
+            isSelected ? .regular.tint(.white.opacity(0.15)).interactive() : .regular.interactive(),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
     }
 }
 

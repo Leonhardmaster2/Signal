@@ -39,8 +39,20 @@ struct GeneratedSummary {
     @Guide(description: "2-4 sentences providing essential background, key discussion points, and conclusions")
     var context: String
     
+    @Guide(description: "Key source moments from the conversation with timestamps (3-5 items)")
+    var sources: [GeneratedSource]
+    
     @Guide(description: "List of action items extracted from the conversation")
     var actions: [GeneratedAction]
+}
+
+@Generable(description: "A source citation from the conversation")
+struct GeneratedSource {
+    @Guide(description: "Timestamp in seconds where this was discussed")
+    var timestamp: Double
+    
+    @Guide(description: "Brief description of what was discussed at this moment")
+    var description: String
 }
 
 @Generable(description: "An action item from a meeting")
@@ -50,6 +62,9 @@ struct GeneratedAction {
     
     @Guide(description: "A clear, actionable description of what needs to be done")
     var task: String
+    
+    @Guide(description: "Optional timestamp in seconds where this action was mentioned")
+    var timestamp: Double?
 }
 
 // MARK: - On-Device Summarization Service
@@ -86,7 +101,7 @@ final class OnDeviceSummarizationService {
     }
     
     /// Summarize a transcript using Apple Intelligence (on-device)
-    func summarize(transcript: String, meetingNotes: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData]) {
+    func summarize(transcript: String, meetingNotes: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData]?) {
         // Check availability
         guard isAvailable else {
             throw unavailabilityReason ?? .modelNotAvailable
@@ -131,11 +146,20 @@ final class OnDeviceSummarizationService {
                 ActionData(
                     assignee: action.assignee,
                     task: action.task,
-                    isCompleted: false
+                    isCompleted: false,
+                    timestamp: action.timestamp
                 )
             }
             
-            return (summary.oneLiner, summary.context, actions)
+            // Convert to SourceData format
+            let sources = summary.sources.map { source in
+                SourceData(
+                    timestamp: source.timestamp,
+                    description: source.description
+                )
+            }
+            
+            return (summary.oneLiner, summary.context, actions, sources)
             
         } catch {
             throw OnDeviceSummarizationError.generationFailed(error.localizedDescription)

@@ -24,6 +24,7 @@ final class Recording {
     var summaryOneLiner: String?
     var summaryContext: String?
     var summaryActions: [ActionData]?
+    var summarySources: [SourceData]?
 
     // Meeting notes
     var notes: String?
@@ -106,8 +107,9 @@ final class Recording {
         guard let oneLiner = summaryOneLiner, let context = summaryContext else { return nil }
         return Summary(
             oneLiner: oneLiner,
-            actionVectors: (summaryActions ?? []).map { ActionVector(assignee: $0.assignee, task: $0.task, isCompleted: $0.isCompleted) },
-            context: context
+            actionVectors: (summaryActions ?? []).map { ActionVector(assignee: $0.assignee, task: $0.task, isCompleted: $0.isCompleted, timestamp: $0.timestamp) },
+            context: context,
+            sources: (summarySources ?? []).map { Source(timestamp: $0.timestamp, description: $0.description) }
         )
     }
 
@@ -199,6 +201,12 @@ struct ActionData: Codable {
     let assignee: String
     let task: String
     var isCompleted: Bool
+    let timestamp: TimeInterval?
+}
+
+struct SourceData: Codable {
+    let timestamp: TimeInterval
+    let description: String
 }
 
 // MARK: - View-layer types (not persisted)
@@ -219,6 +227,7 @@ struct Summary {
     let oneLiner: String
     let actionVectors: [ActionVector]
     let context: String
+    let sources: [Source]
 }
 
 struct ActionVector: Identifiable {
@@ -226,10 +235,18 @@ struct ActionVector: Identifiable {
     let assignee: String
     let task: String
     var isCompleted: Bool
+    let timestamp: TimeInterval?
 
-    init(assignee: String, task: String, isCompleted: Bool = false) {
+    init(assignee: String, task: String, isCompleted: Bool = false, timestamp: TimeInterval? = nil) {
         self.assignee = assignee
         self.task = task
         self.isCompleted = isCompleted
+        self.timestamp = timestamp
     }
+}
+
+struct Source: Identifiable {
+    let id = UUID()
+    let timestamp: TimeInterval
+    let description: String
 }

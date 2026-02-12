@@ -42,12 +42,19 @@ private struct GeminiResponsePart: Decodable {
 private struct GeminiSummaryJSON: Decodable {
     let oneLiner: String
     let context: String
+    let sources: [GeminiSource]?
     let actions: [GeminiAction]
+}
+
+private struct GeminiSource: Decodable {
+    let timestamp: Double
+    let description: String
 }
 
 private struct GeminiAction: Decodable {
     let assignee: String
     let task: String
+    let timestamp: Double?
 }
 
 // MARK: - Errors
@@ -102,8 +109,8 @@ final class SummarizationService {
         return key
     }
 
-    /// Summarize a transcript into a one-liner, context paragraph, and action items.
-    func summarize(transcript: String, meetingNotes: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData]) {
+    /// Summarize a transcript into a one-liner, context paragraph, sources, and action items.
+    func summarize(transcript: String, meetingNotes: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData]) {
         guard let apiKey else { throw SummarizationError.noAPIKey }
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw SummarizationError.noTranscript
@@ -162,21 +169,24 @@ final class SummarizationService {
 
     private func buildPrompt(transcript: String, meetingNotes: String?) -> String {
         var prompt = """
-        You are a precise meeting summarizer. Analyze the following meeting transcript and produce a JSON summary.
+        You are a precise meeting summarizer. Analyze the following meeting transcript and produce a JSON summary with source citations.
 
         Rules:
         - "oneLiner": A single concise sentence (max 20 words) capturing the core outcome or decision.
-        - "context": 2-4 sentences providing essential background, key discussion points, and conclusions.
-        - "actions": An array of action items with "assignee" (speaker name or "Team") and "task" (clear, actionable description).
+        - "context": 2-4 sentences providing essential background, key discussion points, and conclusions. When making claims, cite the source timestamp in square brackets [MM:SS].
+        - "sources": An array of key moments with "timestamp" (in seconds as a number) and "description" (brief summary of what was discussed at that point).
+        - "actions": An array of action items with "assignee" (speaker name or "Team"), "task" (clear, actionable description), and optional "timestamp" (in seconds, where this action was mentioned).
         - If no clear action items exist, return an empty actions array.
         - Use speaker names as they appear in the transcript.
         - Be concise and factual. No filler.
+        - Extract 3-5 key source timestamps that support your summary.
 
         Respond ONLY with valid JSON matching this schema:
         {
           "oneLiner": "string",
           "context": "string",
-          "actions": [{"assignee": "string", "task": "string"}]
+          "sources": [{"timestamp": number, "description": "string"}],
+          "actions": [{"assignee": "string", "task": "string", "timestamp": number}]
         }
 
         TRANSCRIPT:
@@ -196,7 +206,7 @@ final class SummarizationService {
 
     // MARK: - Parsing
 
-    private func parseSummaryJSON(_ text: String) throws -> (oneLiner: String, context: String, actions: [ActionData]) {
+    private func parseSummaryJSON(_ text: String) throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData]) {
         // Clean up potential markdown code fences
         var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.hasPrefix("```json") {
@@ -221,10 +231,14 @@ final class SummarizationService {
         }
 
         let actions = parsed.actions.map {
-            ActionData(assignee: $0.assignee, task: $0.task, isCompleted: false)
+            ActionData(assignee: $0.assignee, task: $0.task, isCompleted: false, timestamp: $0.timestamp)
+        }
+        
+        let sources = (parsed.sources ?? []).map {
+            SourceData(timestamp: $0.timestamp, description: $0.description)
         }
 
-        return (parsed.oneLiner, parsed.context, actions)
+        return (parsed.oneLiner, parsed.context, actions, sources)
     }
     
     // MARK: - Unified Summarization (Routes to On-Device or Cloud)
@@ -234,6 +248,7 @@ final class SummarizationService {
         let oneLiner: String
         let context: String
         let actions: [ActionData]
+        let sources: [SourceData]
         let wasOnDevice: Bool
     }
     
@@ -249,6 +264,7 @@ final class SummarizationService {
                 oneLiner: result.oneLiner,
                 context: result.context,
                 actions: result.actions,
+                sources: result.sources ?? [],
                 wasOnDevice: true
             )
         } else {
@@ -258,6 +274,7 @@ final class SummarizationService {
                 oneLiner: result.oneLiner,
                 context: result.context,
                 actions: result.actions,
+                sources: result.sources,
                 wasOnDevice: false
             )
         }

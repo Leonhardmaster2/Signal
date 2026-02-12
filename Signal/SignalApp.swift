@@ -27,6 +27,9 @@ struct SignalApp: App {
                     // Request notification permissions
                     await requestNotificationPermissions()
                 }
+                .onOpenURL { url in
+                    handleIncomingURL(url)
+                }
         }
         .modelContainer(sharedModelContainer)
         .onChange(of: scenePhase) { _, newPhase in
@@ -43,6 +46,25 @@ struct SignalApp: App {
             default:
                 break
             }
+        }
+    }
+    
+    /// Handle incoming audio file URLs from share sheet or file picker
+    private func handleIncomingURL(_ url: URL) {
+        // Check if it's an audio file
+        let audioExtensions = ["m4a", "mp3", "wav", "aiff", "aif", "caf"]
+        guard audioExtensions.contains(url.pathExtension.lowercased()) else { return }
+        
+        // Store the URL for the app to process
+        UserDefaults.standard.set(url.absoluteString, forKey: "pendingAudioImport")
+        
+        // Notify the app
+        Task { @MainActor in
+            NotificationCenter.default.post(
+                name: .importAudioFile,
+                object: nil,
+                userInfo: ["url": url]
+            )
         }
     }
 
@@ -159,6 +181,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
 extension Notification.Name {
     static let openRecordingFromNotification = Notification.Name("openRecordingFromNotification")
+    static let importAudioFile = Notification.Name("importAudioFile")
 }
 
 // MARK: - Root View (Handles Onboarding)

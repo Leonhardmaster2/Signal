@@ -11,7 +11,52 @@
 	<array>
 		<string>com.signal.transcription</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Signal needs microphone access to record audio for transcription and analysis.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Signal uses on-device speech recognition to transcribe your recordings privately without sending data to external servers. Speech recognition supports multiple languages including German, French, Spanish, and more.</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Audio Files</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.audio</string>
+				<string>public.mp3</string>
+				<string>public.mpeg-4-audio</string>
+				<string>com.apple.m4a-audio</string>
+				<string>public.aiff-audio</string>
+				<string>public.aifc-audio</string>
+				<string>com.microsoft.waveform-audio</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.audio</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Audio File</string>
+			<key>UTTypeIdentifier</key>
+			<string>public.audio</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>m4a</string>
+					<string>mp3</string>
+					<string>wav</string>
+					<string>aiff</string>
+					<string>aif</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

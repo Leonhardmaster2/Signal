@@ -6,72 +6,126 @@ import SwiftUI
 
 enum SubscriptionTier: String, Codable, CaseIterable {
     case free = "free"
-    case standard = "standard"
-    case pro = "pro"
+    case standardMonthly = "standard_monthly"
+    case standardYearly = "standard_yearly"
+    case proMonthly = "pro_monthly"
+    case proYearly = "pro_yearly"
     
     var displayName: String {
         switch self {
         case .free: return "Free"
-        case .standard: return "Standard"
-        case .pro: return "Pro"
+        case .standardMonthly, .standardYearly: return "Standard"
+        case .proMonthly, .proYearly: return "Pro"
         }
     }
     
     var tagline: String {
         switch self {
         case .free: return "The Hook"
-        case .standard: return "The Daily Driver"
-        case .pro: return "The Power User"
+        case .standardMonthly, .standardYearly: return "The Daily Driver"
+        case .proMonthly, .proYearly: return "The Power User"
         }
     }
     
     var monthlyPrice: String {
         switch self {
         case .free: return "Free"
-        case .standard: return "$12/mo"
-        case .pro: return "$35/mo"
+        case .standardMonthly: return "$9.99/mo"
+        case .standardYearly: return "$79.99/yr"
+        case .proMonthly: return "$30/mo"
+        case .proYearly: return "$239.99/yr"
         }
+    }
+    
+    var pricePerMonth: String {
+        switch self {
+        case .free: return "Free"
+        case .standardMonthly: return "$9.99/mo"
+        case .standardYearly: return "$6.67/mo"
+        case .proMonthly: return "$30/mo"
+        case .proYearly: return "$20/mo"
+        }
+    }
+    
+    var billingPeriod: String {
+        switch self {
+        case .free: return ""
+        case .standardMonthly, .proMonthly: return "Monthly"
+        case .standardYearly, .proYearly: return "Yearly"
+        }
+    }
+    
+    var isYearly: Bool {
+        switch self {
+        case .standardYearly, .proYearly: return true
+        default: return false
+        }
+    }
+    
+    var baseLevel: TierLevel {
+        switch self {
+        case .free: return .free
+        case .standardMonthly, .standardYearly: return .standard
+        case .proMonthly, .proYearly: return .pro
+        }
+    }
+    
+    enum TierLevel {
+        case free, standard, pro
     }
     
     /// Monthly transcription limit in seconds
     var transcriptionLimitSeconds: TimeInterval {
-        switch self {
-        case .free: return 0             // 0 hours - must upgrade to transcribe
+        switch baseLevel {
+        case .free: return 15 * 60       // 15 minutes
         case .standard: return 12 * 3600 // 12 hours
-        case .pro: return 60 * 3600      // 60 hours
+        case .pro: return 36 * 3600      // 36 hours
         }
     }
     
     /// Human-readable transcription limit
     var transcriptionLimitLabel: String {
-        switch self {
-        case .free: return "Upgrade to transcribe"
+        switch baseLevel {
+        case .free: return "15 min/month"
         case .standard: return "12 hours/month"
-        case .pro: return "60 hours/month"
+        case .pro: return "36 hours/month"
+        }
+    }
+    
+    /// Maximum upload duration in seconds (for audio file imports)
+    var maxUploadDurationSeconds: TimeInterval {
+        switch baseLevel {
+        case .free: return 0              // Cannot upload/transcribe
+        case .standard: return 2 * 3600   // 2 hours max
+        case .pro: return .infinity       // Unlimited
+        }
+    }
+    
+    var maxUploadDurationLabel: String {
+        switch baseLevel {
+        case .free: return "Upload locked"
+        case .standard: return "2h max upload"
+        case .pro: return "Unlimited upload"
         }
     }
     
     /// Maximum number of stored transcripts (nil = unlimited)
     var historyLimit: Int? {
-        switch self {
-        case .free: return 5
+        switch baseLevel {
+        case .free: return nil  // Unlimited recordings, just can't transcribe
         case .standard: return nil
         case .pro: return nil
         }
     }
     
     var historyLimitLabel: String {
-        switch self {
-        case .free: return "Last 5 transcripts"
-        case .standard: return "Unlimited history"
-        case .pro: return "Unlimited history"
-        }
+        return "Unlimited recordings"
     }
     
     /// Summarization quality description
     var summarizationQuality: String {
-        switch self {
-        case .free: return "Standard bullet points"
+        switch baseLevel {
+        case .free: return "Transcription only (no AI analysis)"
         case .standard: return "Deep Dive (takeaways, actions, sentiment)"
         case .pro: return "Deep Dive + Ask Your Audio"
         }
@@ -79,29 +133,30 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     
     /// Features list for the tier
     var features: [SubscriptionFeature] {
-        switch self {
+        switch baseLevel {
         case .free:
             return [
-                SubscriptionFeature(icon: "mic.fill", text: "Unlimited free recording"),
-                SubscriptionFeature(icon: "lock.fill", text: "Transcription requires upgrade"),
-                SubscriptionFeature(icon: "waveform", text: "Basic audio playback"),
-                SubscriptionFeature(icon: "doc.text", text: "Last 5 recordings only")
+                SubscriptionFeature(icon: "mic.fill", text: "Unlimited recordings (always free)"),
+                SubscriptionFeature(icon: "waveform", text: "44kHz recording quality"),
+                SubscriptionFeature(icon: "clock.fill", text: "15 min transcription/month"),
+                SubscriptionFeature(icon: "infinity", text: "Unlimited storage"),
+                SubscriptionFeature(icon: "lock.fill", text: "No AI analysis (upgrade required)")
             ]
         case .standard:
             return [
                 SubscriptionFeature(icon: "clock.fill", text: "12 hours transcription/month"),
-                SubscriptionFeature(icon: "brain", text: "AI-powered summaries"),
-                SubscriptionFeature(icon: "infinity", text: "Unlimited history"),
+                SubscriptionFeature(icon: "cpu", text: "On-device speech recognition (when available)"),
+                SubscriptionFeature(icon: "brain", text: "On-device AI summaries (when available)"),
                 SubscriptionFeature(icon: "person.2.fill", text: "Speaker identification"),
-                SubscriptionFeature(icon: "doc.richtext", text: "Export to PDF/Markdown"),
-                SubscriptionFeature(icon: "star", text: "Priority support")
+                SubscriptionFeature(icon: "arrow.up.doc", text: "Upload audio (2h max)"),
+                SubscriptionFeature(icon: "doc.richtext", text: "Export to PDF/Markdown")
             ]
         case .pro:
             return [
-                SubscriptionFeature(icon: "clock.badge.checkmark", text: "60 hours transcription/month"),
+                SubscriptionFeature(icon: "clock.badge.checkmark", text: "36 hours transcription/month"),
                 SubscriptionFeature(icon: "bubble.left.and.bubble.right", text: "Ask Your Audio (chat with transcripts)"),
                 SubscriptionFeature(icon: "bolt.fill", text: "Priority processing"),
-                SubscriptionFeature(icon: "arrow.up.doc", text: "Upload files up to 2h+"),
+                SubscriptionFeature(icon: "arrow.up.doc", text: "Unlimited upload size"),
                 SubscriptionFeature(icon: "magnifyingglass", text: "Audio search"),
                 SubscriptionFeature(icon: "checkmark.seal.fill", text: "Everything in Standard")
             ]
@@ -112,8 +167,10 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     var productId: String? {
         switch self {
         case .free: return nil
-        case .standard: return "com.proceduralabs.signal.standard.monthly"
-        case .pro: return "com.proceduralabs.signal.pro.monthly"
+        case .standardMonthly: return "com.proceduralabs.signal.standard.monthly"
+        case .standardYearly: return "com.proceduralabs.signal.standard.yearly"
+        case .proMonthly: return "com.proceduralabs.signal.pro.monthly"
+        case .proYearly: return "com.proceduralabs.signal.pro.yearly"
         }
     }
 }
@@ -124,15 +181,58 @@ struct SubscriptionFeature: Identifiable {
     let text: String
 }
 
+// MARK: - Credit Packs
+
+enum CreditPack: String, CaseIterable {
+    case privacyPack = "privacy_pack"  // $3 - 2 hours + on-device features
+    
+    var displayName: String {
+        switch self {
+        case .privacyPack: return "Privacy Pack"
+        }
+    }
+    
+    var tagline: String {
+        switch self {
+        case .privacyPack: return "Transcribe on your phone"
+        }
+    }
+    
+    var creditSeconds: TimeInterval {
+        switch self {
+        case .privacyPack: return 2 * 3600 // 2 hours
+        }
+    }
+    
+    var price: String {
+        switch self {
+        case .privacyPack: return "$3"
+        }
+    }
+    
+    var productId: String {
+        "com.proceduralabs.signal.privacy.pack"
+    }
+    
+    /// Whether this pack grants on-device features
+    var grantsOnDeviceFeatures: Bool {
+        switch self {
+        case .privacyPack: return true
+        }
+    }
+}
+
 // MARK: - Usage Tracking
 
 struct UsageData: Codable {
     var transcriptionSecondsUsed: TimeInterval
     var periodStartDate: Date
     var transcriptCount: Int
+    var creditSeconds: TimeInterval // One-time purchased credits
+    var hasPrivacyPack: Bool // Whether user has purchased the privacy pack (grants on-device features)
     
     static var empty: UsageData {
-        UsageData(transcriptionSecondsUsed: 0, periodStartDate: Date(), transcriptCount: 0)
+        UsageData(transcriptionSecondsUsed: 0, periodStartDate: Date(), transcriptCount: 0, creditSeconds: 0, hasPrivacyPack: false)
     }
     
     /// Check if the period has reset (new month)
@@ -185,17 +285,34 @@ final class SubscriptionManager {
     
     /// Whether user has an active paid subscription (Standard or Pro)
     var isSubscribed: Bool {
-        currentTier == .standard || currentTier == .pro
+        currentTier.baseLevel != .free
     }
     
-    /// Whether user can transcribe (has a paid subscription)
+    /// Whether user can transcribe (always true - free tier has 15min, paid has more)
     var canTranscribeAtAll: Bool {
-        isSubscribed
+        true  // Everyone can transcribe now (free tier has 15 min/month)
     }
     
-    /// Remaining transcription time in seconds
+    /// Whether user has access to on-device features (privacy pack or Standard+)
+    var hasOnDeviceAccess: Bool {
+        usage.hasPrivacyPack || currentTier.baseLevel == .standard || currentTier.baseLevel == .pro
+    }
+    
+    /// Check if user can upload/import audio of given duration
+    func canUpload(duration: TimeInterval) -> Bool {
+        guard isSubscribed else { return false }
+        return duration <= currentTier.maxUploadDurationSeconds
+    }
+    
+    /// Remaining transcription time in seconds (including credits)
     var remainingTranscriptionSeconds: TimeInterval {
-        max(0, currentTier.transcriptionLimitSeconds - usage.transcriptionSecondsUsed)
+        let subscriptionRemaining = max(0, currentTier.transcriptionLimitSeconds - usage.transcriptionSecondsUsed)
+        return subscriptionRemaining + usage.creditSeconds
+    }
+    
+    /// Remaining credit seconds (one-time purchases only)
+    var remainingCreditSeconds: TimeInterval {
+        usage.creditSeconds
     }
     
     /// Remaining transcription time as formatted string
@@ -204,11 +321,22 @@ final class SubscriptionManager {
         let hours = Int(remaining) / 3600
         let minutes = (Int(remaining) % 3600) / 60
         
+        let timeString: String
         if hours > 0 {
-            return "\(hours)h \(minutes)m remaining"
+            timeString = "\(hours)h \(minutes)m"
         } else {
-            return "\(minutes)m remaining"
+            timeString = "\(minutes)m"
         }
+        
+        // Add credit indicator if user has credits
+        if usage.creditSeconds > 0 {
+            let creditHours = Int(usage.creditSeconds) / 3600
+            let creditMinutes = (Int(usage.creditSeconds) % 3600) / 60
+            let creditString = creditHours > 0 ? "\(creditHours)h \(creditMinutes)m" : "\(creditMinutes)m"
+            return "\(timeString) (\(creditString) credits)"
+        }
+        
+        return "\(timeString) remaining"
     }
     
     /// Usage percentage (0.0 - 1.0)
@@ -223,10 +351,25 @@ final class SubscriptionManager {
         return remainingTranscriptionSeconds >= duration
     }
     
-    /// Record transcription usage
+    /// Record transcription usage (uses credits first, then subscription time)
     func recordTranscriptionUsage(seconds: TimeInterval) {
         checkAndResetPeriod()
-        usage.transcriptionSecondsUsed += seconds
+        
+        // Use credits first
+        if usage.creditSeconds > 0 {
+            let creditsToUse = min(seconds, usage.creditSeconds)
+            usage.creditSeconds -= creditsToUse
+            let remainingSeconds = seconds - creditsToUse
+            
+            // If there's still time left after using credits, use subscription time
+            if remainingSeconds > 0 {
+                usage.transcriptionSecondsUsed += remainingSeconds
+            }
+        } else {
+            // No credits, use subscription time
+            usage.transcriptionSecondsUsed += seconds
+        }
+        
         usage.transcriptCount += 1
         saveLocalData()
     }
@@ -250,7 +393,9 @@ final class SubscriptionManager {
             usage = UsageData(
                 transcriptionSecondsUsed: 0,
                 periodStartDate: Date(),
-                transcriptCount: usage.transcriptCount
+                transcriptCount: usage.transcriptCount,
+                creditSeconds: usage.creditSeconds, // Preserve credits across resets
+                hasPrivacyPack: usage.hasPrivacyPack // Preserve privacy pack access
             )
             saveLocalData()
         }
@@ -272,7 +417,8 @@ final class SubscriptionManager {
         isLoading = true
         defer { isLoading = false }
         
-        let productIds = SubscriptionTier.allCases.compactMap { $0.productId }
+        var productIds = SubscriptionTier.allCases.compactMap { $0.productId }
+        productIds.append(contentsOf: CreditPack.allCases.map { $0.productId })
         
         do {
             products = try await Product.products(for: productIds)
@@ -284,6 +430,10 @@ final class SubscriptionManager {
     func product(for tier: SubscriptionTier) -> Product? {
         guard let productId = tier.productId else { return nil }
         return products.first { $0.id == productId }
+    }
+    
+    func product(for pack: CreditPack) -> Product? {
+        return products.first { $0.id == pack.productId }
     }
     
     func purchase(_ tier: SubscriptionTier) async throws -> Bool {
@@ -298,6 +448,41 @@ final class SubscriptionManager {
             let transaction = try checkVerified(verification)
             await transaction.finish()
             await updatePurchasedProducts()
+            return true
+            
+        case .userCancelled:
+            return false
+            
+        case .pending:
+            return false
+            
+        @unknown default:
+            return false
+        }
+    }
+    
+    func purchaseCreditPack(_ pack: CreditPack) async throws -> Bool {
+        guard let product = product(for: pack) else {
+            throw SubscriptionError.productNotFound
+        }
+        
+        let result = try await product.purchase()
+        
+        switch result {
+        case .success(let verification):
+            let transaction = try checkVerified(verification)
+            
+            // Add credits to user's account
+            usage.creditSeconds += pack.creditSeconds
+            
+            // Grant on-device features if this pack includes them
+            if pack.grantsOnDeviceFeatures {
+                usage.hasPrivacyPack = true
+            }
+            
+            saveLocalData()
+            
+            await transaction.finish()
             return true
             
         case .userCancelled:
@@ -327,11 +512,15 @@ final class SubscriptionManager {
         
         purchasedProductIDs = purchased
         
-        // Update tier based on purchased products
-        if let proId = SubscriptionTier.pro.productId, purchased.contains(proId) {
-            currentTier = .pro
-        } else if let standardId = SubscriptionTier.standard.productId, purchased.contains(standardId) {
-            currentTier = .standard
+        // Update tier based on purchased products (prioritize yearly, then monthly, then highest tier)
+        if let proYearlyId = SubscriptionTier.proYearly.productId, purchased.contains(proYearlyId) {
+            currentTier = .proYearly
+        } else if let proMonthlyId = SubscriptionTier.proMonthly.productId, purchased.contains(proMonthlyId) {
+            currentTier = .proMonthly
+        } else if let standardYearlyId = SubscriptionTier.standardYearly.productId, purchased.contains(standardYearlyId) {
+            currentTier = .standardYearly
+        } else if let standardMonthlyId = SubscriptionTier.standardMonthly.productId, purchased.contains(standardMonthlyId) {
+            currentTier = .standardMonthly
         } else {
             currentTier = .free
         }

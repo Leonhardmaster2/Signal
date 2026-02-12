@@ -125,12 +125,32 @@ struct DashboardView: View {
             autoStartRecording = true
             showRecorder = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .viewLatestRecordingFromShortcut)) { _ in
+            // Open the latest recording
+            if let latest = recordings.first {
+                selectedRecording = latest
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .importAudioFile)) { notification in
+            // Handle imported audio file
+            if let url = notification.userInfo?["url"] as? URL {
+                importAudioFile(url: url)
+            }
+        }
         .onAppear {
             // Check for pending shortcut recording (cold-start case)
             if UserDefaults.standard.bool(forKey: "pendingShortcutRecording") {
                 UserDefaults.standard.set(false, forKey: "pendingShortcutRecording")
                 autoStartRecording = true
                 showRecorder = true
+            }
+            
+            // Check for pending view latest recording (cold-start case)
+            if UserDefaults.standard.bool(forKey: "pendingViewLatestRecording") {
+                UserDefaults.standard.set(false, forKey: "pendingViewLatestRecording")
+                if let latest = recordings.first {
+                    selectedRecording = latest
+                }
             }
         }
         .alert("Delete Recording", isPresented: Binding(
@@ -413,38 +433,73 @@ struct DashboardView: View {
     }
     
     private func importAudioFile(url: URL) {
+        // Check if user has subscription or credits
+        guard SubscriptionManager.shared.canTranscribeAtAll else {
+            // User doesn't have access - show paywall and reject import
+            showPaywall = true
+            return
+        }
+        
         // Extract filename without extension for title
         let title = url.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: "imported_", with: "")
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
         
-        let fileName = url.lastPathComponent
+        // Create unique filename for the imported file
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let fileExtension = url.pathExtension
+        let destinationFileName = "imported_\(timestamp).\(fileExtension)"
         
-        // Get audio duration asynchronously
+        // Get the app's documents directory
+        guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            print("Failed to get documents directory")
+            return
+        }
+        
+        let destinationURL = documentsURL.appendingPathComponent(destinationFileName)
+        
+        // Copy the file asynchronously
         Task {
-            let asset = AVURLAsset(url: url)
-            let duration: TimeInterval
-            if let assetDuration = try? await asset.load(.duration) {
-                duration = assetDuration.seconds
-            } else {
-                duration = 0
+            var duration: TimeInterval = 0
+            
+            // Access security-scoped resource if needed
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
             }
             
-            await MainActor.run {
-                // Create a new recording from the imported file
-                let recording = Recording(
-                    title: title.isEmpty ? "Imported Audio" : title,
-                    duration: duration,
-                    amplitudeSamples: []
-                )
-                recording.audioFileName = fileName
+            do {
+                // Copy the file to our documents directory
+                try FileManager.default.copyItem(at: url, to: destinationURL)
                 
-                modelContext.insert(recording)
-                try? modelContext.save()
+                // Get audio duration
+                let asset = AVURLAsset(url: destinationURL)
+                if let assetDuration = try? await asset.load(.duration) {
+                    duration = assetDuration.seconds
+                }
                 
-                // Select the new recording
-                selectedRecording = recording
+                await MainActor.run {
+                    // Create a new recording from the imported file
+                    let recording = Recording(
+                        title: title.isEmpty ? "Imported Audio" : title,
+                        duration: duration,
+                        amplitudeSamples: []
+                    )
+                    recording.audioFileName = destinationFileName
+                    
+                    modelContext.insert(recording)
+                    try? modelContext.save()
+                    
+                    // Select the new recording
+                    selectedRecording = recording
+                }
+            } catch {
+                print("Failed to import audio file: \(error.localizedDescription)")
+                // Clean up if copy failed
+                try? FileManager.default.removeItem(at: destinationURL)
             }
         }
     }

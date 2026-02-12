@@ -10,9 +10,11 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
 
     private var player: AVAudioPlayer?
     private var timer: Timer?
+    private var isSeeking = false
 
     func load(url: URL) {
         stop()
+        
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default)
@@ -21,6 +23,8 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
             player = try AVAudioPlayer(contentsOf: url)
             player?.delegate = self
             player?.prepareToPlay()
+            player?.enableRate = true
+            
             duration = player?.duration ?? 0
             currentTime = 0
             progress = 0
@@ -30,7 +34,7 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     func play() {
-        guard let player else { return }
+        guard let player = player else { return }
         player.play()
         isPlaying = true
         startTimer()
@@ -43,20 +47,38 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     func togglePlayback() {
-        if isPlaying { pause() } else { play() }
+        if isPlaying { 
+            pause() 
+        } else { 
+            play() 
+        }
     }
 
     func seek(to fraction: CGFloat) {
-        guard let player else { return }
-        let time = Double(fraction) * duration
-        player.currentTime = time
-        currentTime = time
+        guard let player = player else { return }
+        
+        let targetTime = Double(fraction) * duration
+        
+        // Clamp to valid range
+        let clampedTime = max(0, min(duration - 0.01, targetTime))
+        
+        // Update immediately for responsive UI
+        currentTime = clampedTime
         progress = fraction
+        
+        // Apply to player
+        player.currentTime = clampedTime
+        
+        // If we were playing, continue playing
+        if isPlaying && !player.isPlaying {
+            player.play()
+        }
     }
 
     func stop() {
         player?.stop()
         player = nil
+        
         isPlaying = false
         currentTime = 0
         progress = 0
@@ -69,9 +91,21 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         stopTimer()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             guard let self, let player = self.player else { return }
+            
+            // Update time from player
             self.currentTime = player.currentTime
             self.duration = player.duration
-            self.progress = player.duration > 0 ? CGFloat(player.currentTime / player.duration) : 0
+            
+            // Calculate progress
+            if self.duration > 0 {
+                self.progress = CGFloat(self.currentTime / self.duration)
+            }
+            
+            // Check if finished
+            if !player.isPlaying && self.isPlaying {
+                self.isPlaying = false
+                self.stopTimer()
+            }
         }
     }
 

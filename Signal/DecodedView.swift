@@ -749,6 +749,58 @@ struct DecodedView: View {
                         .foregroundStyle(.gray)
                         .lineSpacing(4)
                 }
+                
+                // Sources
+                if !summary.sources.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("SOURCES")
+                            .font(AppFont.mono(size: 9, weight: .medium))
+                            .kerning(1.0)
+                            .foregroundStyle(.gray)
+                        
+                        ForEach(summary.sources) { source in
+                            Button {
+                                // Seek to this timestamp
+                                if recording.duration > 0 {
+                                    let fraction = CGFloat(source.timestamp / recording.duration)
+                                    sharedPlayer.seek(to: fraction)
+                                    if !sharedPlayer.isPlaying {
+                                        sharedPlayer.play()
+                                    }
+                                }
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: "waveform")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.white.opacity(0.5))
+                                        .frame(width: 16)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(source.description)
+                                            .font(AppFont.mono(size: 12, weight: .regular))
+                                            .foregroundStyle(.white.opacity(0.8))
+                                            .multilineTextAlignment(.leading)
+                                        
+                                        Text(source.timestamp.formatted)
+                                            .font(AppFont.mono(size: 10, weight: .medium))
+                                            .foregroundStyle(.gray)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: "play.circle")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(.white.opacity(0.5))
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 10)
+                                .background(Color.white.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
         } else if recording.isSummarizing {
             VStack(spacing: 12) {
@@ -937,12 +989,15 @@ struct DecodedView: View {
 
             if recording.audioURL != nil {
                 Button {
-                    if let url = recording.audioURL {
-                        shareItems = [url]
-                        showShareSheet = true
-                    }
+                    shareAudio()
                 } label: {
                     Label("Share Audio", systemImage: "square.and.arrow.up")
+                }
+                
+                Button {
+                    shareSignalPackage()
+                } label: {
+                    Label("Share Signal Package", systemImage: "shippingbox")
                 }
             }
 
@@ -1212,6 +1267,55 @@ struct DecodedView: View {
                         .font(AppFont.mono(size: 14, weight: .regular))
                         .foregroundStyle(.gray)
                         .lineSpacing(5)
+                }
+                
+                // Sources
+                if !summary.sources.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TrackedLabel("SOURCES", size: 10, kerning: 1.5)
+                        
+                        ForEach(summary.sources) { source in
+                            Button {
+                                // Seek to this timestamp
+                                if recording.duration > 0 {
+                                    let fraction = CGFloat(source.timestamp / recording.duration)
+                                    sharedPlayer.seek(to: fraction)
+                                    if !sharedPlayer.isPlaying {
+                                        sharedPlayer.play()
+                                    }
+                                }
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: "waveform")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.white.opacity(0.5))
+                                        .frame(width: 16)
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(source.description)
+                                            .font(AppFont.mono(size: 13, weight: .regular))
+                                            .foregroundStyle(.white.opacity(0.8))
+                                            .multilineTextAlignment(.leading)
+                                        
+                                        Text(source.timestamp.formatted)
+                                            .font(AppFont.mono(size: 11, weight: .medium))
+                                            .foregroundStyle(.gray)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: "play.circle")
+                                        .font(.system(size: 16))
+                                        .foregroundStyle(.white.opacity(0.5))
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .background(Color.white.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
             } else if recording.isSummarizing {
                 callToAction(
@@ -1654,7 +1758,7 @@ struct DecodedView: View {
         Task {
             do {
                 let asset = AVURLAsset(url: sourceURL)
-                let duration = try await asset.load(.duration)
+                _ = try await asset.load(.duration)
 
                 let tempDir = FileManager.default.temporaryDirectory
                 let outputName = "\(recording.title)_\(bitrate / 1000)kbps.m4a"
@@ -1675,9 +1779,9 @@ struct DecodedView: View {
                 exportSession.outputFileType = .m4a
                 exportSession.audioTimePitchAlgorithm = .varispeed
 
-                await exportSession.export()
-
-                if exportSession.status == .completed {
+                do {
+                    try await exportSession.export(to: outputURL, as: .m4a)
+                    
                     // Get compressed size
                     let attrs = try FileManager.default.attributesOfItem(atPath: outputURL.path)
                     let size = attrs[.size] as? Int64 ?? 0
@@ -1692,10 +1796,10 @@ struct DecodedView: View {
                         shareItems = [outputURL]
                         showShareSheet = true
                     }
-                } else {
+                } catch {
                     await MainActor.run {
                         isCompressing = false
-                        compressionResult = "Compression failed: \(exportSession.error?.localizedDescription ?? "Unknown")"
+                        compressionResult = "Compression failed: \(error.localizedDescription)"
                     }
                 }
             } catch {
@@ -1876,6 +1980,7 @@ struct DecodedView: View {
         recording.summaryOneLiner = nil
         recording.summaryContext = nil
         recording.summaryActions = nil
+        recording.summarySources = nil
         recording.wasSummarizedOnDevice = nil
         recording.summarizationError = nil
         recording.speakerNames = nil
@@ -1979,6 +2084,12 @@ struct DecodedView: View {
 
     private func summarize() {
         guard let transcriptText = recording.transcriptFullText else { return }
+        
+        // Check if user has access to AI summarization
+        if !FeatureGate.canAccess(.aiSummarization) {
+            showPaywall = true
+            return
+        }
 
         recording.isSummarizing = true
         recording.summarizationError = nil
@@ -1993,6 +2104,7 @@ struct DecodedView: View {
                 recording.summaryOneLiner = result.oneLiner
                 recording.summaryContext = result.context
                 recording.summaryActions = result.actions
+                recording.summarySources = result.sources
                 recording.wasSummarizedOnDevice = result.wasOnDevice
                 recording.isSummarizing = false
             } catch {
@@ -2017,6 +2129,28 @@ struct DecodedView: View {
         }
     }
     
+    private func shareAudio() {
+        guard let url = recording.audioURL else {
+            print("❌ No audio URL available for sharing")
+            return
+        }
+        
+        // Verify file exists
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("❌ Audio file doesn't exist at: \(url.path)")
+            return
+        }
+        
+        // Get file size for logging
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+           let fileSize = attributes[.size] as? Int64 {
+            print("✅ Sharing audio file: \(url.lastPathComponent) (\(fileSize) bytes)")
+        }
+        
+        shareItems = [url]
+        showShareSheet = true
+    }
+    
     private func exportAsMarkdown() {
         let markdown = ExportService.shared.exportAsMarkdown(recording: recording)
         shareItems = [markdown]
@@ -2029,6 +2163,19 @@ struct DecodedView: View {
             try? pdfData.write(to: tempURL)
             shareItems = [tempURL]
             showShareSheet = true
+        }
+    }
+    
+    private func shareSignalPackage() {
+        if let packageURL = SignalPackageExporter.shared.createSignalPackage(recording: recording) {
+            shareItems = [packageURL]
+            showShareSheet = true
+            
+            // Clean up after sharing completes (delayed)
+            Task {
+                try? await Task.sleep(for: .seconds(60))
+                SignalPackageExporter.shared.cleanupPackage(at: packageURL)
+            }
         }
     }
 
@@ -2586,61 +2733,56 @@ struct TranscriptionMethodChooser: View {
                 // Options
                 VStack(spacing: 12) {
                     // Apple On-Device Option
-                    Button {
-                        onChooseApple()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Image(systemName: "apple.logo")
-                                    .font(.system(size: 20))
-                                    .foregroundStyle(.white)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("APPLE ON-DEVICE")
-                                        .font(AppFont.mono(size: 13, weight: .bold))
-                                        .kerning(1.0)
+                    // Only show on-device option if user has Standard+ AND device supports it
+                    if FeatureGate.canAccess(.onDeviceTranscription) && isOnDeviceAvailable {
+                        Button {
+                            onChooseApple()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Image(systemName: "apple.logo")
+                                        .font(.system(size: 20))
                                         .foregroundStyle(.white)
                                     
-                                    Text("Private & Free")
-                                        .font(AppFont.mono(size: 11))
-                                        .foregroundStyle(.gray)
-                                }
-                                
-                                Spacer()
-                                
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text("FREE")
-                                        .font(AppFont.mono(size: 11, weight: .bold))
-                                        .foregroundStyle(.green)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("APPLE ON-DEVICE")
+                                            .font(AppFont.mono(size: 13, weight: .bold))
+                                            .kerning(1.0)
+                                            .foregroundStyle(.white)
+                                        
+                                        Text("Private & Unlimited")
+                                            .font(AppFont.mono(size: 11))
+                                            .foregroundStyle(.gray)
+                                    }
                                     
-                                    Text("Unlimited")
-                                        .font(AppFont.mono(size: 10))
-                                        .foregroundStyle(.gray)
+                                    Spacer()
+                                    
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text("INCLUDED")
+                                            .font(AppFont.mono(size: 11, weight: .bold))
+                                            .foregroundStyle(.green)
+                                        
+                                        Text("Unlimited")
+                                            .font(AppFont.mono(size: 10))
+                                            .foregroundStyle(.gray)
+                                    }
+                                }
+                                
+                                // Features
+                                HStack(spacing: 16) {
+                                    featureTag(icon: "lock.fill", text: "Private")
+                                    featureTag(icon: "iphone", text: "On-Device")
+                                    featureTag(icon: "bolt.fill", text: "Fast")
                                 }
                             }
-                            
-                            // Features
-                            HStack(spacing: 16) {
-                                featureTag(icon: "lock.fill", text: "Private")
-                                featureTag(icon: "iphone", text: "On-Device")
-                                featureTag(icon: "bolt.fill", text: "Fast")
-                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .glassCard(radius: 12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
                         }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .glassCard(radius: 12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
-                    }
-                    .disabled(!isOnDeviceAvailable)
-                    .opacity(isOnDeviceAvailable ? 1 : 0.5)
-                    
-                    if !isOnDeviceAvailable {
-                        Text("On-device transcription not available for selected language")
-                            .font(AppFont.mono(size: 10))
-                            .foregroundStyle(.orange)
                     }
                     
                     // ElevenLabs API Option

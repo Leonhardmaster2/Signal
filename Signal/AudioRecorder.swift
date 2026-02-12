@@ -2,6 +2,20 @@ import AVFoundation
 import ActivityKit
 import UIKit
 
+// MARK: - Audio Source Type
+
+enum AudioSource: Equatable {
+    case external  // Microphone (surroundings)
+    
+    var displayName: String {
+        return "Microphone"
+    }
+    
+    var icon: String {
+        return "mic.fill"
+    }
+}
+
 @Observable
 final class AudioRecorder: NSObject {
     static let shared = AudioRecorder()
@@ -13,10 +27,13 @@ final class AudioRecorder: NSObject {
     var smoothedAmplitude: Float = 0
     var amplitudeHistory: [Float] = []
     var marks: [TimeInterval] = []
+    var currentAudioSource: AudioSource = .external
 
     private var recorder: AVAudioRecorder?
     private var meteringTimer: DispatchSourceTimer?
     private(set) var fileURL: URL?
+    private var audioEngine: AVAudioEngine?
+    private var audioFile: AVAudioFile?
 
     // Smoothing factor for amplitude
     private let smoothingFactor: Float = 0.35
@@ -57,13 +74,31 @@ final class AudioRecorder: NSObject {
 
     // MARK: - Recording Control
 
-    func startRecording() async throws {
+    func startRecording(source: AudioSource = .external) async throws {
+        // Verify we have permission before trying to start
+        let status = AVAudioApplication.shared.recordPermission
+        guard status == .granted else {
+            throw NSError(
+                domain: "AudioRecorder",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Microphone permission not authorized"]
+            )
+        }
+        
+        currentAudioSource = source
         let session = AVAudioSession.sharedInstance()
+        
+        // Deactivate first to clear any previous state
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        
+        // Configure audio session for microphone recording
         try session.setCategory(
             .playAndRecord,
             mode: .default,
             options: [.defaultToSpeaker, .allowBluetoothA2DP, .mixWithOthers]
         )
+        
+        // Activate the audio session
         try session.setActive(true, options: [])
 
         beginBackgroundTask()
@@ -74,7 +109,7 @@ final class AudioRecorder: NSObject {
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 16000.0,
+            AVSampleRateKey: 44100.0,  // 44kHz studio-quality recording
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
@@ -96,6 +131,36 @@ final class AudioRecorder: NSObject {
         startLiveActivity()
         setupAudioObservers()
         startMeteringTimer()
+    }
+    
+    private func startInternalAudioRecording(url: URL) throws {
+        // Setup audio engine for internal recording
+        audioEngine = AVAudioEngine()
+        guard let engine = audioEngine else { return }
+        
+        let inputNode = engine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        
+        // Create audio file for writing
+        audioFile = try AVAudioFile(forWriting: url, settings: [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 44100.0,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+        ])
+        
+        // Install tap on input node to capture audio
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, _ in
+            guard let self = self, let file = self.audioFile else { return }
+            do {
+                try file.write(from: buffer)
+            } catch {
+                print("Failed to write audio buffer: \\(error)")
+            }
+        }
+        
+        // Start the engine
+        try engine.start()
     }
 
     func pauseRecording() {
@@ -125,6 +190,15 @@ final class AudioRecorder: NSObject {
         removeAudioObservers()
 
         recorder?.stop()
+        
+        // Stop audio engine if using internal recording
+        if let engine = audioEngine {
+            engine.stop()
+            engine.inputNode.removeTap(onBus: 0)
+            audioEngine = nil
+            audioFile = nil
+        }
+        
         isRecording = false
         isPaused = false
 
@@ -137,7 +211,30 @@ final class AudioRecorder: NSObject {
     }
 
     func requestPermission() async -> Bool {
-        await AVAudioApplication.requestRecordPermission()
+        // Check current permission status first
+        let status = AVAudioApplication.shared.recordPermission
+        
+        switch status {
+        case .granted:
+            // Already have permission
+            return true
+        case .denied:
+            // User previously denied
+            return false
+        case .undetermined:
+            // Need to request permission
+            if #available(iOS 17.0, *) {
+                return await AVAudioApplication.requestRecordPermission()
+            } else {
+                return await withCheckedContinuation { continuation in
+                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                        continuation.resume(returning: granted)
+                    }
+                }
+            }
+        @unknown default:
+            return false
+        }
     }
 
     func deleteFile(at url: URL) {

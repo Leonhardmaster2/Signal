@@ -558,10 +558,10 @@ struct SettingsView: View {
         standup.summaryOneLiner = "Daily standup covering auth completion, dashboard fix, and Q2 planning"
         standup.summaryContext = "The team discussed progress on authentication (completed), a dashboard performance fix (N+1 query resolved), and upcoming work on user profiles, notifications, and analytics. A staging server performance issue was flagged for investigation."
         standup.summaryActions = [
-            ActionData(assignee: "Sarah", task: "Work on user profile page", isCompleted: false),
-            ActionData(assignee: "Mike", task: "Complete notification system and coordinate with Sarah on auth integration", isCompleted: false),
-            ActionData(assignee: "Alex", task: "Review PRs and write analytics technical spec", isCompleted: false),
-            ActionData(assignee: "Alex", task: "Create ticket for staging server performance", isCompleted: true)
+            ActionData(assignee: "Sarah", task: "Work on user profile page", isCompleted: false, timestamp: nil),
+            ActionData(assignee: "Mike", task: "Complete notification system and coordinate with Sarah on auth integration", isCompleted: false, timestamp: nil),
+            ActionData(assignee: "Alex", task: "Review PRs and write analytics technical spec", isCompleted: false, timestamp: nil),
+            ActionData(assignee: "Alex", task: "Create ticket for staging server performance", isCompleted: true, timestamp: nil)
         ]
         modelContext.insert(standup)
         
@@ -606,9 +606,9 @@ struct SettingsView: View {
         clientCall.summaryOneLiner = "Projekt Alpha Status: 80% fertig, Legacy-Integration benötigt mehr Zeit"
         clientCall.summaryContext = "Statusupdate für Projekt Alpha mit dem Kunden. Kernfunktionalität 80% abgeschlossen, UI wird nächste Woche fertig. Performance um 40% verbessert. Legacy-System-Integration benötigt eine zusätzliche Woche."
         clientCall.summaryActions = [
-            ActionData(assignee: "Team", task: "UI nächste Woche finalisieren", isCompleted: false),
-            ActionData(assignee: "Team", task: "Legacy-System Integration abschließen (+ 1 Woche)", isCompleted: false),
-            ActionData(assignee: "Projektleiter", task: "Herrn Schmidt über Fortschritte informieren", isCompleted: false)
+            ActionData(assignee: "Team", task: "UI nächste Woche finalisieren", isCompleted: false, timestamp: nil),
+            ActionData(assignee: "Team", task: "Legacy-System Integration abschließen (+ 1 Woche)", isCompleted: false, timestamp: nil),
+            ActionData(assignee: "Projektleiter", task: "Herrn Schmidt über Fortschritte informieren", isCompleted: false, timestamp: nil)
         ]
         modelContext.insert(clientCall)
         
@@ -814,9 +814,10 @@ struct LanguagePickerView: View {
     
     private func loadLanguages() async {
         // Load on background thread to avoid blocking UI
+        let commonLangs = OnDeviceTranscriptionService.commonLanguages
         let languages = await Task.detached(priority: .userInitiated) {
             // Get common languages and check support
-            OnDeviceTranscriptionService.commonLanguages.compactMap { lang -> (code: String, name: String, supportsOnDevice: Bool)? in
+            commonLangs.compactMap { lang -> (code: String, name: String, supportsOnDevice: Bool)? in
                 // Check if language is supported at all
                 let supportedLocales = SFSpeechRecognizer.supportedLocales()
                 let isSupported = supportedLocales.contains { locale in
