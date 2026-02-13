@@ -106,11 +106,7 @@ final class NotificationService {
         if let language = detectedLanguage, let languageName = languageDisplayName(for: language) {
             body += " (\(languageName))"
         }
-        if wasOnDevice {
-            body += " using on-device processing."
-        } else {
-            body += "."
-        }
+        body += "."
         
         content.body = body
         content.sound = .default
@@ -179,13 +175,7 @@ final class NotificationService {
         if let summary = oneLiner, !summary.isEmpty {
             content.body = summary
         } else {
-            var body = "\"\(recordingTitle)\" has been summarized"
-            if wasOnDevice {
-                body += " using Apple Intelligence."
-            } else {
-                body += "."
-            }
-            content.body = body
+            content.body = "\"\(recordingTitle)\" has been summarized."
         }
         
         content.sound = .default

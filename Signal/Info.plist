@@ -14,7 +14,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Signal needs microphone access to record audio for transcription and analysis.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Signal uses on-device speech recognition to transcribe your recordings privately without sending data to external servers. Speech recognition supports multiple languages including German, French, Spanish, and more.</string>
+	<string>Signal uses speech recognition to transcribe your recordings. Speech recognition supports multiple languages including German, French, Spanish, and more.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

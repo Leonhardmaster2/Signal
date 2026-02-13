@@ -51,6 +51,7 @@ final class SignalPackageExporter {
     private init() {}
     
     /// Create a Signal package (.signal) that includes audio, transcript, and metadata
+    /// Returns a ZIP file URL for cross-platform sharing compatibility
     func createSignalPackage(recording: Recording) -> URL? {
         // Create temporary directory for package
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -138,7 +139,41 @@ final class SignalPackageExporter {
         let readmeURL = packageURL.appendingPathComponent("README.txt")
         try? readme.write(to: readmeURL, atomically: true, encoding: .utf8)
         
-        return packageURL
+        // Create a ZIP archive for cross-platform compatibility
+        // This prevents crashes on macOS where UIActivityViewController can't handle directories
+        let zipURL = tempDir.appendingPathComponent("\(recording.title).signal.zip")
+        
+        guard let zipArchive = createZipArchive(from: packageURL, to: zipURL) else {
+            // Fallback: return the directory URL (may crash on Mac but works on iOS)
+            print("⚠️ Failed to create ZIP archive, falling back to directory")
+            return packageURL
+        }
+        
+        return zipArchive
+    }
+    
+    /// Creates a ZIP archive from a directory
+    private func createZipArchive(from sourceDir: URL, to destinationURL: URL) -> URL? {
+        let coordinator = NSFileCoordinator()
+        var error: NSError?
+        var resultURL: URL?
+        
+        coordinator.coordinate(readingItemAt: sourceDir, options: .forUploading, error: &error) { zipURL in
+            do {
+                // The coordinator gives us a temporary zip, copy it to our destination
+                try FileManager.default.copyItem(at: zipURL, to: destinationURL)
+                resultURL = destinationURL
+            } catch {
+                print("❌ Failed to create ZIP: \(error)")
+            }
+        }
+        
+        if let error = error {
+            print("❌ Coordination error: \(error)")
+            return nil
+        }
+        
+        return resultURL
     }
     
     /// Clean up temporary package files

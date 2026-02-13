@@ -100,156 +100,151 @@ struct SettingsView: View {
 
     // MARK: - On-Device Intelligence
     
+    /// Check if any on-device features are available on this device
+    private var anyOnDeviceFeaturesAvailable: Bool {
+        onDeviceTranscriptionAvailable || onDeviceSummarizationAvailable
+    }
+    
+    @ViewBuilder
     private var onDeviceIntelligenceSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                TrackedLabel("ON-DEVICE INTELLIGENCE")
+        // Only show this section if at least one on-device feature is available
+        if anyOnDeviceFeaturesAvailable {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    TrackedLabel("ON-DEVICE INTELLIGENCE")
+                    
+                    // Demo badge
+                    Text("DEMO")
+                        .font(AppFont.mono(size: 9, weight: .bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange)
+                        .clipShape(Capsule())
+                }
                 
-                // Demo badge
-                Text("DEMO")
-                    .font(AppFont.mono(size: 9, weight: .bold))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.orange)
-                    .clipShape(Capsule())
-            }
-            
-            VStack(spacing: 0) {
-                // Apple Transcription toggle
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Apple Transcription")
-                                .font(AppFont.mono(size: 13, weight: .medium))
-                                .foregroundStyle(.white)
-                            Text("Uses on-device speech recognition")
-                                .font(AppFont.mono(size: 10))
-                                .foregroundStyle(Color.muted)
+                VStack(spacing: 0) {
+                    // Apple Transcription toggle - only show if available
+                    if onDeviceTranscriptionAvailable {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Apple Transcription")
+                                        .font(AppFont.mono(size: 13, weight: .medium))
+                                        .foregroundStyle(.white)
+                                    Text("Uses on-device speech recognition")
+                                        .font(AppFont.mono(size: 10))
+                                        .foregroundStyle(Color.muted)
+                                }
+                                Spacer()
+                                Toggle("", isOn: $useOnDeviceTranscription)
+                                    .labelsHidden()
+                                    .tint(.white.opacity(0.5))
+                            }
                         }
-                        Spacer()
-                        Toggle("", isOn: $useOnDeviceTranscription)
-                            .labelsHidden()
-                            .tint(.white.opacity(0.5))
-                            .disabled(!onDeviceTranscriptionAvailable)
+                        .padding(AppLayout.cardPadding)
+                        
+                        if onDeviceSummarizationAvailable {
+                            Color.divider.frame(height: 0.5)
+                        }
                     }
                     
-                    if !onDeviceTranscriptionAvailable {
-                        Text("Not available for current language")
-                            .font(AppFont.mono(size: 10))
-                            .foregroundStyle(.orange)
+                    // Apple Intelligence Summarization toggle - only show if available
+                    if onDeviceSummarizationAvailable {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Text("Apple Intelligence")
+                                            .font(AppFont.mono(size: 13, weight: .medium))
+                                            .foregroundStyle(.white)
+                                        Image(systemName: "apple.intelligence")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.white.opacity(0.7))
+                                    }
+                                    Text("Summarize using on-device AI")
+                                        .font(AppFont.mono(size: 10))
+                                        .foregroundStyle(Color.muted)
+                                }
+                                Spacer()
+                                Toggle("", isOn: $useOnDeviceSummarization)
+                                    .labelsHidden()
+                                    .tint(.white.opacity(0.5))
+                            }
+                        }
+                        .padding(AppLayout.cardPadding)
                     }
-                }
-                .padding(AppLayout.cardPadding)
-                
-                Color.divider.frame(height: 0.5)
-                
-                // Apple Intelligence Summarization toggle
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Text("Apple Intelligence")
-                                    .font(AppFont.mono(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Image(systemName: "apple.intelligence")
+                    
+                    // Language Settings (only shown when on-device transcription is enabled and available)
+                    if useOnDeviceTranscription && onDeviceTranscriptionAvailable {
+                        Color.divider.frame(height: 0.5)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Auto-detect Language")
+                                        .font(AppFont.mono(size: 13, weight: .medium))
+                                        .foregroundStyle(.white)
+                                    Text("Automatically detects spoken language")
+                                        .font(AppFont.mono(size: 10))
+                                        .foregroundStyle(Color.muted)
+                                }
+                                Spacer()
+                                Toggle("", isOn: $useAutoLanguageDetection)
+                                    .labelsHidden()
+                                    .tint(.white.opacity(0.5))
+                            }
+                        }
+                        .padding(AppLayout.cardPadding)
+                        
+                        Color.divider.frame(height: 0.5)
+                        
+                        // Preferred Language selector
+                        Button {
+                            showLanguagePicker = true
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(useAutoLanguageDetection ? "Fallback Language" : "Transcription Language")
+                                        .font(AppFont.mono(size: 13, weight: .medium))
+                                        .foregroundStyle(.white)
+                                    Text(useAutoLanguageDetection ? "Used if detection fails" : "Language for transcription")
+                                        .font(AppFont.mono(size: 10))
+                                        .foregroundStyle(Color.muted)
+                                }
+                                Spacer()
+                                Text(languageDisplayName(for: preferredLanguage))
+                                    .font(AppFont.mono(size: 13))
+                                    .foregroundStyle(Color.muted)
+                                Image(systemName: "chevron.right")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.white.opacity(0.7))
-                            }
-                            Text("Summarize using on-device AI")
-                                .font(AppFont.mono(size: 10))
-                                .foregroundStyle(Color.muted)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $useOnDeviceSummarization)
-                            .labelsHidden()
-                            .tint(.white.opacity(0.5))
-                            .disabled(!onDeviceSummarizationAvailable)
-                    }
-                    
-                    if !onDeviceSummarizationAvailable {
-                        if let reason = OnDeviceSummarizationService.shared.unavailabilityReason {
-                            Text(reason.localizedDescription)
-                                .font(AppFont.mono(size: 10))
-                                .foregroundStyle(.orange)
-                        } else {
-                            Text("Apple Intelligence not available")
-                                .font(AppFont.mono(size: 10))
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                }
-                .padding(AppLayout.cardPadding)
-                
-                Color.divider.frame(height: 0.5)
-                
-                // Language Settings (only shown when on-device transcription is enabled)
-                if useOnDeviceTranscription {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Auto-detect Language")
-                                    .font(AppFont.mono(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Text("Automatically detects spoken language")
-                                    .font(AppFont.mono(size: 10))
                                     .foregroundStyle(Color.muted)
                             }
-                            Spacer()
-                            Toggle("", isOn: $useAutoLanguageDetection)
-                                .labelsHidden()
-                                .tint(.white.opacity(0.5))
                         }
+                        .padding(AppLayout.cardPadding)
                     }
-                    .padding(AppLayout.cardPadding)
                     
                     Color.divider.frame(height: 0.5)
                     
-                    // Preferred Language selector
-                    Button {
-                        showLanguagePicker = true
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(useAutoLanguageDetection ? "Fallback Language" : "Transcription Language")
-                                    .font(AppFont.mono(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Text(useAutoLanguageDetection ? "Used if detection fails" : "Language for transcription")
-                                    .font(AppFont.mono(size: 10))
-                                    .foregroundStyle(Color.muted)
-                            }
-                            Spacer()
-                            Text(languageDisplayName(for: preferredLanguage))
-                                .font(AppFont.mono(size: 13))
-                                .foregroundStyle(Color.muted)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.muted)
-                        }
+                    // Info about on-device processing
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.shield.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.green)
+                        Text("On-device processing keeps your data private")
+                            .font(AppFont.mono(size: 10))
+                            .foregroundStyle(Color.muted)
                     }
                     .padding(AppLayout.cardPadding)
-                    
-                    Color.divider.frame(height: 0.5)
                 }
-                
-                // Info about on-device processing
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.green)
-                    Text("On-device processing keeps your data private")
-                        .font(AppFont.mono(size: 10))
-                        .foregroundStyle(Color.muted)
-                }
-                .padding(AppLayout.cardPadding)
+                .glassCard()
             }
-            .glassCard()
-        }
-        .onAppear {
-            checkOnDeviceAvailability()
-        }
-        .sheet(isPresented: $showLanguagePicker) {
-            LanguagePickerView(selectedLanguage: $preferredLanguage)
+            .onAppear {
+                checkOnDeviceAvailability()
+            }
+            .sheet(isPresented: $showLanguagePicker) {
+                LanguagePickerView(selectedLanguage: $preferredLanguage)
+            }
         }
     }
     
