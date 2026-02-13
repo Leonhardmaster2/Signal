@@ -110,13 +110,17 @@ final class SummarizationService {
     }
 
     /// Summarize a transcript into a one-liner, context paragraph, sources, and action items.
-    func summarize(transcript: String, meetingNotes: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData]) {
+    /// - Parameters:
+    ///   - transcript: The transcript text to summarize
+    ///   - meetingNotes: Optional user-provided meeting notes
+    ///   - language: Optional language code (e.g., "en", "de", "es") - summary will be in this language
+    func summarize(transcript: String, meetingNotes: String? = nil, language: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData]) {
         guard let apiKey else { throw SummarizationError.noAPIKey }
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw SummarizationError.noTranscript
         }
 
-        let prompt = buildPrompt(transcript: transcript, meetingNotes: meetingNotes)
+        let prompt = buildPrompt(transcript: transcript, meetingNotes: meetingNotes, language: language)
 
         let request = GeminiRequest(
             contents: [GeminiContent(parts: [GeminiPart(text: prompt)])],
@@ -167,7 +171,16 @@ final class SummarizationService {
 
     // MARK: - Prompt
 
-    private func buildPrompt(transcript: String, meetingNotes: String?) -> String {
+    private func buildPrompt(transcript: String, meetingNotes: String?, language: String?) -> String {
+        // Determine language instruction
+        let languageInstruction: String
+        if let lang = language, !lang.isEmpty, lang != "en" {
+            let languageName = Locale.current.localizedString(forLanguageCode: lang) ?? lang
+            languageInstruction = "\n- IMPORTANT: Write your entire response (oneLiner, context, sources descriptions, and action tasks) in \(languageName). The transcript is in \(languageName), so respond in the same language."
+        } else {
+            languageInstruction = ""
+        }
+        
         var prompt = """
         You are a precise meeting summarizer. Analyze the following meeting transcript and produce a JSON summary with source citations.
 
@@ -179,7 +192,7 @@ final class SummarizationService {
         - If no clear action items exist, return an empty actions array.
         - Use speaker names as they appear in the transcript.
         - Be concise and factual. No filler.
-        - Extract 3-5 key source timestamps that support your summary.
+        - Extract 3-5 key source timestamps that support your summary.\(languageInstruction)
 
         Respond ONLY with valid JSON matching this schema:
         {
@@ -253,7 +266,13 @@ final class SummarizationService {
     }
     
     /// Unified summarization method that automatically routes based on settings
-    func summarizeAuto(transcript: String, meetingNotes: String? = nil) async throws -> SummarizationResult {
+    /// - Parameters:
+    ///   - transcript: The transcript text to summarize
+    ///   - meetingNotes: Optional user-provided meeting notes
+    ///   - language: Optional language code from transcription (e.g., "en", "de") - summary will match this language
+    func summarizeAuto(transcript: String, meetingNotes: String? = nil, language: String? = nil) async throws -> SummarizationResult {
+        print("📝 [Summarization] Starting with language: \(language ?? "default")")
+        
         if shouldUseOnDevice {
             // Use on-device summarization (Apple Intelligence)
             let result = try await OnDeviceSummarizationService.shared.summarize(
@@ -268,8 +287,8 @@ final class SummarizationService {
                 wasOnDevice: true
             )
         } else {
-            // Use cloud summarization (Gemini)
-            let result = try await summarize(transcript: transcript, meetingNotes: meetingNotes)
+            // Use cloud summarization (Gemini) with language matching
+            let result = try await summarize(transcript: transcript, meetingNotes: meetingNotes, language: language)
             return SummarizationResult(
                 oneLiner: result.oneLiner,
                 context: result.context,

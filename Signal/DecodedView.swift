@@ -63,7 +63,7 @@ struct DecodedView: View {
     @State private var subscriptionLimitError: String?
     
     // Premium features
-    @State private var showAskYourAudio = false
+
     @State private var showAudioSearch = false
     @State private var showExportOptions = false
     
@@ -160,9 +160,7 @@ struct DecodedView: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
         }
-        .sheet(isPresented: $showAskYourAudio) {
-            AskYourAudioView(recording: recording)
-        }
+
         .sheet(isPresented: $showAudioSearch) {
             AudioSearchView(recording: recording)
         }
@@ -961,17 +959,6 @@ struct DecodedView: View {
                 }
 
                 Divider()
-
-                // Ask Your Audio - Pro only
-                Button {
-                    if FeatureGate.canAccess(.askYourAudio) {
-                        showAskYourAudio = true
-                    } else {
-                        showPaywall = true
-                    }
-                } label: {
-                    Label("Ask Your Audio", systemImage: "bubble.left.and.bubble.right")
-                }
                 
                 // Audio Search - Pro only
                 Button {
@@ -2098,7 +2085,8 @@ struct DecodedView: View {
             do {
                 let result = try await SummarizationService.shared.summarizeAuto(
                     transcript: transcriptText,
-                    meetingNotes: recording.notes
+                    meetingNotes: recording.notes,
+                    language: recording.transcriptLanguage
                 )
 
                 recording.summaryOneLiner = result.oneLiner

@@ -127,7 +127,7 @@ enum SubscriptionTier: String, Codable, CaseIterable {
         switch baseLevel {
         case .free: return "Transcription only (no AI analysis)"
         case .standard: return "Deep Dive (takeaways, actions, sentiment)"
-        case .pro: return "Deep Dive + Ask Your Audio"
+        case .pro: return "Deep Dive + Priority Processing"
         }
     }
     
@@ -154,7 +154,6 @@ enum SubscriptionTier: String, Codable, CaseIterable {
         case .pro:
             return [
                 SubscriptionFeature(icon: "clock.badge.checkmark", text: "36 hours transcription/month"),
-                SubscriptionFeature(icon: "bubble.left.and.bubble.right", text: "Ask Your Audio (chat with transcripts)"),
                 SubscriptionFeature(icon: "bolt.fill", text: "Priority processing"),
                 SubscriptionFeature(icon: "arrow.up.doc", text: "Unlimited upload size"),
                 SubscriptionFeature(icon: "magnifyingglass", text: "Audio search"),

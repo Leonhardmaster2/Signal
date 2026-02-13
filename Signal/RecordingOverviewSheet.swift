@@ -466,6 +466,17 @@ struct RecordingOverviewSheet: View {
             recording.wasTranscribedOnDevice = result.wasOnDevice
             recording.isTranscribing = false
 
+            // Log silence trimming info for demo
+            if result.wasSilenceTrimmed, let trimmedSeconds = result.silenceTrimmedSeconds {
+                let trimmedFormatted = String(format: "%.1f", trimmedSeconds)
+                let originalFormatted = String(format: "%.1f", duration)
+                let sentFormatted = String(format: "%.1f", duration - trimmedSeconds)
+                let savingsPercent = String(format: "%.0f", (trimmedSeconds / duration) * 100)
+                overviewLogger.info("✂️ Silence Trimming: Removed \(trimmedFormatted)s of silence (\(savingsPercent)% savings)")
+                overviewLogger.info("✂️ Original: \(originalFormatted)s → Sent to API: \(sentFormatted)s")
+                overviewLogger.info("✂️ Usage charged: \(originalFormatted)s (full original duration)")
+            }
+
             // Record usage after successful transcription (only for cloud)
             if !result.wasOnDevice {
                 SubscriptionManager.shared.recordTranscriptionUsage(seconds: duration)
@@ -508,9 +519,11 @@ struct RecordingOverviewSheet: View {
         recording.summarizationError = nil
 
         do {
+            // Pass the detected language so summary is in the same language as the transcript
             let result = try await SummarizationService.shared.summarizeAuto(
                 transcript: transcriptText,
-                meetingNotes: recording.notes
+                meetingNotes: recording.notes,
+                language: recording.transcriptLanguage
             )
 
             recording.summaryOneLiner = result.oneLiner

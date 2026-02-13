@@ -440,66 +440,47 @@ struct DashboardView: View {
             return
         }
         
-        // Extract filename without extension for title
+        // The file has already been copied to Documents/Recordings/ by AudioFileImporter
+        // Just use the provided URL directly
+        let fileName = url.lastPathComponent
+        
+        // Extract a readable title from the original filename (before UUID replacement)
         let title = url.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: "imported_", with: "")
             .replacingOccurrences(of: "_", with: " ")
-            .capitalized
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespaces)
         
-        // Create unique filename for the imported file
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let fileExtension = url.pathExtension
-        let destinationFileName = "imported_\(timestamp).\(fileExtension)"
+        print("📁 [DashboardView] Creating recording for imported file: \(fileName)")
         
-        // Get the app's documents directory
-        guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            print("Failed to get documents directory")
-            return
-        }
-        
-        let destinationURL = documentsURL.appendingPathComponent(destinationFileName)
-        
-        // Copy the file asynchronously
+        // Get audio duration asynchronously
         Task {
             var duration: TimeInterval = 0
             
-            // Access security-scoped resource if needed
-            let didStartAccessing = url.startAccessingSecurityScopedResource()
-            defer {
-                if didStartAccessing {
-                    url.stopAccessingSecurityScopedResource()
-                }
+            // Get audio duration from the already-copied file
+            let asset = AVURLAsset(url: url)
+            if let assetDuration = try? await asset.load(.duration) {
+                duration = assetDuration.seconds
             }
             
-            do {
-                // Copy the file to our documents directory
-                try FileManager.default.copyItem(at: url, to: destinationURL)
+            print("📁 [DashboardView] Audio duration: \(duration)s")
+            
+            await MainActor.run {
+                // Create a new recording from the imported file
+                let recording = Recording(
+                    title: title.isEmpty ? "Imported Audio" : title,
+                    duration: duration,
+                    amplitudeSamples: []
+                )
+                recording.audioFileName = fileName
                 
-                // Get audio duration
-                let asset = AVURLAsset(url: destinationURL)
-                if let assetDuration = try? await asset.load(.duration) {
-                    duration = assetDuration.seconds
-                }
+                print("📁 [DashboardView] Created recording with audioFileName: \(fileName)")
                 
-                await MainActor.run {
-                    // Create a new recording from the imported file
-                    let recording = Recording(
-                        title: title.isEmpty ? "Imported Audio" : title,
-                        duration: duration,
-                        amplitudeSamples: []
-                    )
-                    recording.audioFileName = destinationFileName
-                    
-                    modelContext.insert(recording)
-                    try? modelContext.save()
-                    
-                    // Select the new recording
-                    selectedRecording = recording
-                }
-            } catch {
-                print("Failed to import audio file: \(error.localizedDescription)")
-                // Clean up if copy failed
-                try? FileManager.default.removeItem(at: destinationURL)
+                modelContext.insert(recording)
+                try? modelContext.save()
+                
+                // Select the new recording
+                selectedRecording = recording
             }
         }
     }

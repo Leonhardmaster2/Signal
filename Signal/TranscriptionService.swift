@@ -78,10 +78,22 @@ final class TranscriptionService {
 
     func transcribe(fileURL: URL, diarize: Bool = true) async throws -> ScribeResponse {
         guard let apiKey else { throw TranscriptionError.noAPIKey }
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { throw TranscriptionError.fileNotFound }
+        
+        // Use standardized path for reliable file checking
+        let standardURL = fileURL.standardizedFileURL
+        let filePath = standardURL.path(percentEncoded: false)
+        
+        print("☁️ [Transcribe] Checking file at: \(filePath)")
+        
+        guard FileManager.default.fileExists(atPath: filePath) else {
+            print("☁️ [Transcribe] ERROR: File not found at: \(filePath)")
+            throw TranscriptionError.fileNotFound
+        }
+        
+        print("☁️ [Transcribe] File exists, preparing upload...")
 
         // Build the request body on a background thread since file I/O can be expensive
-        let body = try await Task.detached(priority: .userInitiated) {
+        let body = try await Task.detached(priority: .userInitiated) { [standardURL] in
             let boundary = UUID().uuidString
             var data = Data()
 
@@ -96,9 +108,9 @@ final class TranscriptionService {
             appendField("timestamps_granularity", "word")
             appendField("tag_audio_events", "false")
 
-            let fileData = try Data(contentsOf: fileURL)
+            let fileData = try Data(contentsOf: standardURL)
             data.append("--\(boundary)\r\n".data(using: .utf8)!)
-            data.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
+            data.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(standardURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
             data.append("Content-Type: audio/mp4\r\n\r\n".data(using: .utf8)!)
             data.append(fileData)
             data.append("\r\n".data(using: .utf8)!)
@@ -203,11 +215,20 @@ final class TranscriptionService {
         let transcript: Transcript
         let wasOnDevice: Bool
         let detectedLanguage: String?
+        let wasSilenceTrimmed: Bool
+        let silenceTrimmedSeconds: TimeInterval? // How much silence was removed
     }
     
     /// Whether to use automatic language detection (from settings)
     var useAutoLanguageDetection: Bool {
         UserDefaults.standard.bool(forKey: "useAutoLanguageDetection")
+    }
+    
+    /// Whether silence trimming is available for the current user (Standard+ only)
+    /// Always enabled automatically - no user toggle needed
+    var shouldUseSilenceTrimming: Bool {
+        let tier = SubscriptionManager.shared.currentTier.baseLevel
+        return tier == .standard || tier == .pro
     }
     
     /// Get/set the preferred transcription language
@@ -221,7 +242,7 @@ final class TranscriptionService {
     }
     
     /// Unified transcription method that automatically routes based on settings
-    /// Supports background execution and automatic language detection
+    /// Supports background execution, automatic language detection, and silence trimming
     /// - Parameters:
     ///   - fileURL: The audio file to transcribe
     ///   - diarize: Whether to identify speakers (cloud only)
@@ -237,17 +258,52 @@ final class TranscriptionService {
         print("🎯 [TranscriptionService] useOnDeviceForThis: \(useOnDeviceForThis)")
         print("🎯 [TranscriptionService] useOnDevice setting: \(useOnDevice)")
         print("🎯 [TranscriptionService] isOnDeviceAvailable: \(OnDeviceTranscriptionService.shared.isOnDeviceAvailable)")
+        print("🎯 [TranscriptionService] shouldUseSilenceTrimming: \(shouldUseSilenceTrimming)")
+        
+        // Apply silence trimming for cloud transcription if enabled (Standard+ only)
+        var audioURLToTranscribe = fileURL
+        var segmentMap: SegmentMap? = nil
+        var trimmedURL: URL? = nil
+        var silenceTrimmedSeconds: TimeInterval? = nil
+        
+        // Only apply silence trimming/speed-up for cloud transcription (saves API costs)
+        if !useOnDeviceForThis && shouldUseSilenceTrimming {
+            print("✂️ [TranscriptionService] Applying audio processing (silence trim + speed-up)...")
+            do {
+                let trimResult = try await SilenceTrimmingService.shared.trimSilence(from: fileURL)
+                segmentMap = trimResult.segmentMap
+                
+                // Always use the processed URL (it's either trimmed+sped or just sped)
+                audioURLToTranscribe = trimResult.trimmedURL
+                trimmedURL = trimResult.trimmedURL
+                
+                if trimResult.segmentMap.hasTrimming {
+                    silenceTrimmedSeconds = trimResult.segmentMap.originalDuration - trimResult.segmentMap.trimmedDuration
+                    print("✂️ [TranscriptionService] Silence trimmed: \(String(format: "%.1f", silenceTrimmedSeconds ?? 0))s removed")
+                }
+                print("✂️ [TranscriptionService] Using processed audio: \(trimResult.trimmedURL.lastPathComponent)")
+            } catch {
+                print("⚠️ [TranscriptionService] Audio processing failed, continuing with original audio: \(error.localizedDescription)")
+                // Continue with original audio if processing fails
+            }
+        }
+        
+        defer {
+            // Cleanup temporary trimmed file
+            if let url = trimmedURL {
+                SilenceTrimmingService.shared.cleanupTrimmedFile(at: url)
+            }
+        }
         
         if useOnDeviceForThis {
             print("✅ [TranscriptionService] Using ON-DEVICE transcription")
-            // Use on-device transcription
+            // Use on-device transcription (no silence trimming needed - it's free)
             let onDeviceService = OnDeviceTranscriptionService.shared
             
             let response: ScribeResponse
             
             if useAutoLanguageDetection {
                 print("🌍 [TranscriptionService] Using automatic language detection")
-                // Use automatic language detection
                 response = try await onDeviceService.transcribeWithLanguageDetection(
                     fileURL: fileURL,
                     preferredLanguages: [preferredLanguage],
@@ -256,7 +312,6 @@ final class TranscriptionService {
                 )
             } else {
                 print("🗣️ [TranscriptionService] Using preferred language: \(preferredLanguage)")
-                // Use preferred language directly
                 onDeviceService.setLanguage(preferredLanguage)
                 response = try await onDeviceService.transcribe(
                     fileURL: fileURL,
@@ -271,21 +326,59 @@ final class TranscriptionService {
                 response: response,
                 transcript: transcript,
                 wasOnDevice: true,
-                detectedLanguage: response.language_code
+                detectedLanguage: response.language_code,
+                wasSilenceTrimmed: false,
+                silenceTrimmedSeconds: nil
             )
         } else {
             print("☁️ [TranscriptionService] Using CLOUD transcription (ElevenLabs)")
-            // Use cloud transcription (ElevenLabs) - it has its own language detection
-            let response = try await transcribe(fileURL: fileURL, diarize: diarize)
-            let transcript = buildTranscript(from: response)
+            // Use cloud transcription (ElevenLabs)
+            let response = try await transcribe(fileURL: audioURLToTranscribe, diarize: diarize)
+            
+            // Remap timestamps if silence was trimmed
+            let remappedResponse: ScribeResponse
+            if let map = segmentMap, map.hasTrimming {
+                print("🔄 [TranscriptionService] Remapping timestamps to original audio timeline")
+                remappedResponse = remapTimestamps(response: response, segmentMap: map)
+            } else {
+                remappedResponse = response
+            }
+            
+            let transcript = buildTranscript(from: remappedResponse)
             print("✅ [TranscriptionService] Cloud transcription completed")
             return TranscriptionResult(
-                response: response,
+                response: remappedResponse,
                 transcript: transcript,
                 wasOnDevice: false,
-                detectedLanguage: response.language_code
+                detectedLanguage: remappedResponse.language_code,
+                wasSilenceTrimmed: segmentMap?.hasTrimming ?? false,
+                silenceTrimmedSeconds: silenceTrimmedSeconds
             )
         }
+    }
+    
+    /// Remap timestamps from trimmed audio back to original audio timeline
+    private func remapTimestamps(response: ScribeResponse, segmentMap: SegmentMap) -> ScribeResponse {
+        guard let words = response.words else {
+            return response
+        }
+        
+        let remappedWords = words.map { word in
+            ScribeWord(
+                text: word.text,
+                start: segmentMap.remapToOriginal(word.start),
+                end: segmentMap.remapToOriginal(word.end),
+                type: word.type,
+                speaker_id: word.speaker_id
+            )
+        }
+        
+        return ScribeResponse(
+            language_code: response.language_code,
+            language_probability: response.language_probability,
+            text: response.text,
+            words: remappedWords
+        )
     }
     
     // MARK: - Language Support Info

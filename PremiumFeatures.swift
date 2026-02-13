@@ -19,26 +19,57 @@ struct AudioFileImporter: ViewModifier {
                 case .success(let urls):
                     if let url = urls.first {
                         // Need to start accessing security-scoped resource
-                        guard url.startAccessingSecurityScopedResource() else { return }
-                        defer { url.stopAccessingSecurityScopedResource() }
+                        let hasAccess = url.startAccessingSecurityScopedResource()
+                        print("📁 [Import] Security-scoped access: \(hasAccess)")
+                        defer { 
+                            if hasAccess { url.stopAccessingSecurityScopedResource() }
+                        }
                         
                         // Copy to app's documents directory
                         let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
                         let recordingsDir = documentsDir.appendingPathComponent("Recordings", isDirectory: true)
-                        try? FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+                        
+                        do {
+                            try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+                        } catch {
+                            print("📁 [Import] Failed to create Recordings directory: \(error)")
+                        }
                         
                         let fileName = "imported_\(UUID().uuidString).\(url.pathExtension)"
                         let destinationURL = recordingsDir.appendingPathComponent(fileName)
                         
+                        print("📁 [Import] Source: \(url.path)")
+                        print("📁 [Import] Destination: \(destinationURL.path)")
+                        
                         do {
+                            // Check if source exists and is readable
+                            guard FileManager.default.isReadableFile(atPath: url.path) else {
+                                print("📁 [Import] ERROR: Source file is not readable")
+                                return
+                            }
+                            
+                            // Remove existing file if present
+                            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                                try FileManager.default.removeItem(at: destinationURL)
+                            }
+                            
                             try FileManager.default.copyItem(at: url, to: destinationURL)
-                            onImport(destinationURL)
+                            
+                            // Verify the copy succeeded
+                            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                                let attrs = try FileManager.default.attributesOfItem(atPath: destinationURL.path)
+                                let size = attrs[.size] as? Int64 ?? 0
+                                print("📁 [Import] SUCCESS: Copied \(size) bytes to \(destinationURL.lastPathComponent)")
+                                onImport(destinationURL)
+                            } else {
+                                print("📁 [Import] ERROR: File copy succeeded but file doesn't exist at destination")
+                            }
                         } catch {
-                            print("Failed to copy imported file: \(error)")
+                            print("📁 [Import] Failed to copy imported file: \(error)")
                         }
                     }
                 case .failure(let error):
-                    print("File import failed: \(error)")
+                    print("📁 [Import] File import failed: \(error)")
                 }
             }
     }
@@ -259,240 +290,6 @@ final class ExportService {
         formatter.dateStyle = .long
         formatter.timeStyle = .short
         return formatter.string(from: date)
-    }
-}
-
-// MARK: - Ask Your Audio (Chat with Transcript)
-
-struct AskYourAudioView: View {
-    let recording: Recording
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var messages: [ChatMessage] = []
-    @State private var inputText = ""
-    @State private var isLoading = false
-    
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Chat messages
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            // Initial context message
-                            ChatBubble(
-                                message: ChatMessage(
-                                    role: .assistant,
-                                    content: "I've analyzed the transcript for \"\(recording.title)\". Ask me anything about what was discussed!"
-                                ),
-                                isUser: false
-                            )
-                            
-                            ForEach(messages) { message in
-                                ChatBubble(message: message, isUser: message.role == .user)
-                                    .id(message.id)
-                            }
-                            
-                            if isLoading {
-                                HStack {
-                                    ProgressView()
-                                        .tint(.white)
-                                    Text("Thinking...")
-                                        .font(AppFont.mono(size: 12))
-                                        .foregroundStyle(.gray)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal)
-                            }
-                        }
-                        .padding()
-                    }
-                    .onChange(of: messages.count) { _, _ in
-                        if let lastMessage = messages.last {
-                            withAnimation {
-                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
-                
-                // Input area
-                HStack(spacing: 12) {
-                    TextField("Ask about this recording...", text: $inputText)
-                        .font(AppFont.mono(size: 14))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                    
-                    Button {
-                        sendMessage()
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(inputText.isEmpty ? .gray : .white)
-                    }
-                    .disabled(inputText.isEmpty || isLoading)
-                }
-                .padding()
-                .background(Color.black)
-            }
-            .background(Color.black.ignoresSafeArea())
-            .preferredColorScheme(.dark)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("ASK YOUR AUDIO")
-                        .font(AppFont.mono(size: 13, weight: .semibold))
-                        .kerning(2.0)
-                        .foregroundStyle(.white)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .font(AppFont.mono(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
-                }
-            }
-        }
-    }
-    
-    private func sendMessage() {
-        let userMessage = ChatMessage(role: .user, content: inputText)
-        messages.append(userMessage)
-        let question = inputText
-        inputText = ""
-        isLoading = true
-        
-        Task {
-            do {
-                let response = try await askAboutTranscript(question: question)
-                let assistantMessage = ChatMessage(role: .assistant, content: response)
-                await MainActor.run {
-                    messages.append(assistantMessage)
-                    isLoading = false
-                }
-            } catch {
-                let errorMessage = ChatMessage(role: .assistant, content: "Sorry, I couldn't process that question. Please try again.")
-                await MainActor.run {
-                    messages.append(errorMessage)
-                    isLoading = false
-                }
-            }
-        }
-    }
-    
-    private func askAboutTranscript(question: String) async throws -> String {
-        guard let transcript = recording.transcriptFullText else {
-            return "No transcript available for this recording."
-        }
-        
-        // Load Gemini API key from Secrets.plist
-        guard let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
-              let secrets = NSDictionary(contentsOfFile: path),
-              let apiKey = secrets["GEMINI_API_KEY"] as? String else {
-            return "API configuration error. Please check your settings."
-        }
-        
-        // Prepare the Gemini API request
-        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=\(apiKey)")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // Create a focused system prompt
-        let systemPrompt = """
-        You are analyzing an audio transcript. Answer questions directly and concisely based ONLY on the transcript content.
-        - Be brief and to the point
-        - Don't add extra commentary or suggestions
-        - If the answer isn't in the transcript, say so clearly
-        - Don't ask follow-up questions
-        """
-        
-        let userPrompt = """
-        Transcript:
-        \(transcript)
-        
-        Question: \(question)
-        
-        Answer based only on the transcript above. Be direct and concise.
-        """
-        
-        let requestBody: [String: Any] = [
-            "contents": [
-                [
-                    "parts": [
-                        ["text": systemPrompt],
-                        ["text": userPrompt]
-                    ]
-                ]
-            ],
-            "generationConfig": [
-                "temperature": 0.3,
-                "maxOutputTokens": 500,
-                "topP": 0.95,
-                "topK": 40
-            ]
-        ]
-        
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        
-        // Make the API call
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            return "Network error occurred."
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            return "API error: Unable to process your question at this time."
-        }
-        
-        // Parse the response
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let firstCandidate = candidates.first,
-              let content = firstCandidate["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]],
-              let firstPart = parts.first,
-              let text = firstPart["text"] as? String else {
-            return "Unable to parse response. Please try again."
-        }
-        
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-struct ChatMessage: Identifiable {
-    let id = UUID()
-    let role: ChatRole
-    let content: String
-    let timestamp = Date()
-}
-
-enum ChatRole {
-    case user
-    case assistant
-}
-
-struct ChatBubble: View {
-    let message: ChatMessage
-    let isUser: Bool
-    
-    var body: some View {
-        HStack {
-            if isUser { Spacer() }
-            
-            Text(message.content)
-                .font(AppFont.mono(size: 13, weight: .regular))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(isUser ? Color.white.opacity(0.2) : Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-            
-            if !isUser { Spacer() }
-        }
     }
 }
 
@@ -732,8 +529,6 @@ struct FeatureGate {
             return tier == .standard || tier == .pro
         case .speakerIdentification:
             return tier == .standard || tier == .pro
-        case .askYourAudio:
-            return tier == .pro
         case .audioSearch:
             return tier == .pro
         case .priorityProcessing:
@@ -751,7 +546,7 @@ struct FeatureGate {
             return .free  // Everyone can transcribe
         case .aiSummarization, .onDeviceTranscription, .onDeviceSummarization, .audioUpload, .exportPDF, .exportMarkdown, .speakerIdentification, .unlimitedHistory:
             return .standardMonthly
-        case .askYourAudio, .audioSearch, .priorityProcessing, .longFileUpload:
+        case .audioSearch, .priorityProcessing, .longFileUpload:
             return .proMonthly
         }
     }
@@ -766,7 +561,6 @@ enum PremiumFeature {
     case exportPDF
     case exportMarkdown
     case speakerIdentification
-    case askYourAudio
     case audioSearch
     case priorityProcessing
     case longFileUpload
@@ -782,7 +576,6 @@ enum PremiumFeature {
         case .exportPDF: return "Export to PDF"
         case .exportMarkdown: return "Export to Markdown"
         case .speakerIdentification: return "Speaker Identification"
-        case .askYourAudio: return "Ask Your Audio"
         case .audioSearch: return "Audio Search"
         case .priorityProcessing: return "Priority Processing"
         case .longFileUpload: return "Long File Upload"
