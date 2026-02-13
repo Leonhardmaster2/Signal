@@ -1,6 +1,60 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 import UniformTypeIdentifiers
+
+#if os(macOS)
+import AppKit
+
+struct ShareSheet: View {
+    let items: [Any]
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Share")
+                .font(.headline)
+            
+            if let url = items.first as? URL {
+                Text(url.lastPathComponent)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                
+                Button("Copy to Clipboard") {
+                    if url.isFileURL {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.writeObjects([url as NSURL])
+                    }
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+            } else if let text = items.first as? String {
+                Button("Copy to Clipboard") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            
+            Button("Cancel") {
+                dismiss()
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(30)
+        .frame(minWidth: 300)
+    }
+}
+
+#else
 
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
@@ -26,6 +80,20 @@ struct ShareSheet: UIViewControllerRepresentable {
         
         let controller = UIActivityViewController(activityItems: processedItems, applicationActivities: nil)
         
+        // CRITICAL: Configure popover for iPad/Mac Catalyst
+        // Without this, the app will crash on iPad and Mac
+        if let popover = controller.popoverPresentationController {
+            // Use screen center as default anchor - this prevents crashes
+            popover.permittedArrowDirections = []
+            popover.sourceView = UIView()
+            popover.sourceRect = CGRect(
+                x: UIScreen.main.bounds.midX,
+                y: UIScreen.main.bounds.midY,
+                width: 0,
+                height: 0
+            )
+        }
+        
         // Configure for better file sharing
         controller.completionWithItemsHandler = { activityType, completed, returnedItems, error in
             if let error = error {
@@ -41,6 +109,8 @@ struct ShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
+
+#endif
 
 // MARK: - Signal Package Exporter
 
