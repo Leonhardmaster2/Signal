@@ -33,6 +33,24 @@ extension L10n {
         "choose_language": "Choose Language",
         "select_your_language": "Select Your Language",
 
+        // Usage Profile
+        "how_will_you_use": "How will you use Trace?",
+        "usage_subtitle": "This helps us tailor your experience",
+        "usage_professional": "Professional",
+        "usage_professional_desc": "Meetings, calls & client work",
+        "usage_student": "Student",
+        "usage_student_desc": "Lectures, study groups & notes",
+        "usage_freelancer": "Freelancer",
+        "usage_freelancer_desc": "Client calls & project briefs",
+        "usage_journalist": "Journalist",
+        "usage_journalist_desc": "Interviews & research",
+        "usage_researcher": "Researcher",
+        "usage_researcher_desc": "Field work & data collection",
+        "usage_personal": "Personal",
+        "usage_personal_desc": "Voice memos & personal notes",
+        "usage_other": "Other",
+        "usage_other_desc": "Something else entirely",
+
         // Credit Offer
         "one_time_offer": "ONE-TIME OFFER",
         "final_offer": "FINAL OFFER",

@@ -207,8 +207,11 @@ final class SummarizationService {
             languageInstruction = ""
         }
         
+        let currentDate = Date().formatted(date: .long, time: .omitted)
         var prompt = """
         You are a precise meeting summarizer. Analyze the following meeting transcript and produce a JSON summary with source citations.
+
+        Today's date is \(currentDate). Use this as your reference for the current date and year when interpreting relative dates (e.g. "tomorrow", "next Friday", "by end of month").
 
         Rules:
         - "oneLiner": A single concise sentence (max 20 words) capturing the core outcome or decision.

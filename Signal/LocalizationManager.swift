@@ -197,6 +197,24 @@ enum L10n {
     static var chooseLanguage: String { t("choose_language") }
     static var selectYourLanguage: String { t("select_your_language") }
 
+    // MARK: - Usage Profile
+    static var howWillYouUse: String { t("how_will_you_use") }
+    static var usageSubtitle: String { t("usage_subtitle") }
+    static var usageProfessional: String { t("usage_professional") }
+    static var usageProfessionalDesc: String { t("usage_professional_desc") }
+    static var usageStudent: String { t("usage_student") }
+    static var usageStudentDesc: String { t("usage_student_desc") }
+    static var usageFreelancer: String { t("usage_freelancer") }
+    static var usageFreelancerDesc: String { t("usage_freelancer_desc") }
+    static var usageJournalist: String { t("usage_journalist") }
+    static var usageJournalistDesc: String { t("usage_journalist_desc") }
+    static var usageResearcher: String { t("usage_researcher") }
+    static var usageResearcherDesc: String { t("usage_researcher_desc") }
+    static var usagePersonal: String { t("usage_personal") }
+    static var usagePersonalDesc: String { t("usage_personal_desc") }
+    static var usageOther: String { t("usage_other") }
+    static var usageOtherDesc: String { t("usage_other_desc") }
+
     // MARK: - Credit Offer
     static var oneTimeOffer: String { t("one_time_offer") }
     static var finalOffer: String { t("final_offer") }

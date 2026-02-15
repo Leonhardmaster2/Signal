@@ -10,8 +10,8 @@ struct OnboardingView: View {
     @State private var creditOfferPrice: Double = 3.00
     @State private var hasShownCreditOffer = false
 
-    /// Total pages: language picker (0) + 3 content pages (1,2,3)
-    private let totalPages = 4
+    /// Total pages: language (0) + usage (1) + 3 feature pages (2,3,4)
+    private let totalPages = 5
 
     var body: some View {
         ZStack {
@@ -39,14 +39,18 @@ struct OnboardingView: View {
                     LanguageSelectionPage()
                         .tag(0)
 
-                    // Page 1-3: Feature pages
+                    // Page 1: Usage profile
+                    UsageProfilePage()
+                        .tag(1)
+
+                    // Page 2-4: Feature pages
                     OnboardingPageView(
                         icon: "mic.fill",
                         iconColor: .white,
                         title: L10n.onboardingTitle1,
                         subtitle: L10n.onboardingSubtitle1,
                         highlight: L10n.onboardingHighlight1
-                    ).tag(1)
+                    ).tag(2)
 
                     OnboardingPageView(
                         icon: "waveform.badge.magnifyingglass",
@@ -54,7 +58,7 @@ struct OnboardingView: View {
                         title: L10n.onboardingTitle2,
                         subtitle: L10n.onboardingSubtitle2,
                         highlight: L10n.onboardingHighlight2
-                    ).tag(2)
+                    ).tag(3)
 
                     OnboardingPageView(
                         icon: "brain",
@@ -62,7 +66,7 @@ struct OnboardingView: View {
                         title: L10n.onboardingTitle3,
                         subtitle: L10n.onboardingSubtitle3,
                         highlight: L10n.onboardingHighlight3
-                    ).tag(3)
+                    ).tag(4)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -242,6 +246,148 @@ private struct LanguageCell: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.white.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+        }
+    }
+}
+
+// MARK: - User Usage Type
+
+enum UserUsageType: String, CaseIterable, Identifiable {
+    case professional
+    case student
+    case freelancer
+    case journalist
+    case researcher
+    case personal
+    case other
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .professional: return "briefcase.fill"
+        case .student: return "graduationcap.fill"
+        case .freelancer: return "laptopcomputer"
+        case .journalist: return "newspaper.fill"
+        case .researcher: return "flask.fill"
+        case .personal: return "person.fill"
+        case .other: return "ellipsis.circle.fill"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .professional: return L10n.usageProfessional
+        case .student: return L10n.usageStudent
+        case .freelancer: return L10n.usageFreelancer
+        case .journalist: return L10n.usageJournalist
+        case .researcher: return L10n.usageResearcher
+        case .personal: return L10n.usagePersonal
+        case .other: return L10n.usageOther
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .professional: return L10n.usageProfessionalDesc
+        case .student: return L10n.usageStudentDesc
+        case .freelancer: return L10n.usageFreelancerDesc
+        case .journalist: return L10n.usageJournalistDesc
+        case .researcher: return L10n.usageResearcherDesc
+        case .personal: return L10n.usagePersonalDesc
+        case .other: return L10n.usageOtherDesc
+        }
+    }
+
+    /// Persist the user's selection
+    static var saved: UserUsageType? {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: "userUsageType") else { return nil }
+            return UserUsageType(rawValue: raw)
+        }
+        set {
+            UserDefaults.standard.set(newValue?.rawValue, forKey: "userUsageType")
+        }
+    }
+}
+
+// MARK: - Usage Profile Page
+
+struct UsageProfilePage: View {
+    @State private var selected: UserUsageType? = UserUsageType.saved
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // Icon
+            ZStack {
+                Image(systemName: "person.text.rectangle")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(.white)
+                    .padding(36)
+            }
+            .glassEffect(.regular, in: Circle())
+
+            Text(L10n.howWillYouUse)
+                .font(AppFont.mono(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            Text(L10n.usageSubtitle)
+                .font(AppFont.mono(size: 12))
+                .foregroundStyle(.gray)
+
+            // Usage grid
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(UserUsageType.allCases) { usage in
+                        UsageCell(usage: usage, isSelected: selected == usage) {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                selected = usage
+                                UserUsageType.saved = usage
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .frame(maxHeight: 320)
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
+// MARK: - Usage Cell
+
+private struct UsageCell: View {
+    let usage: UserUsageType
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                Image(systemName: usage.icon)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(isSelected ? .white : .gray)
+
+                Text(usage.label)
+                    .font(AppFont.mono(size: 12, weight: isSelected ? .bold : .medium))
+                    .foregroundStyle(isSelected ? .white : .gray)
+
+                Text(usage.description)
+                    .font(AppFont.mono(size: 9))
+                    .foregroundStyle(isSelected ? .white.opacity(0.7) : .gray.opacity(0.6))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 8)
+            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
                     .stroke(isSelected ? Color.white.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }

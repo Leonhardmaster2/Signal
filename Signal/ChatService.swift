@@ -126,9 +126,12 @@ final class ChatService {
         // Build system instruction with formatted transcript
         let formattedTranscript = formatTranscript(segments: segments, speakerNames: speakerNames)
         let userLanguage = LocalizationManager.shared.currentLanguage.englishName
+        let currentDate = Date().formatted(date: .long, time: .omitted)
         let systemPrompt = """
         You are a helpful assistant that answers questions about a recorded audio transcript.
         The full transcript is provided below with timestamps and speaker labels.
+
+        Today's date is \(currentDate). Always use this as your reference for the current date and year.
 
         IMPORTANT: Always respond in \(userLanguage). The user's app language is set to \(userLanguage).
 
