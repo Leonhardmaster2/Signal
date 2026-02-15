@@ -13,45 +13,45 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     
     var displayName: String {
         switch self {
-        case .free: return "Free"
-        case .standardMonthly, .standardYearly: return "Standard"
-        case .proMonthly, .proYearly: return "Pro"
+        case .free: return L10n.tierFree
+        case .standardMonthly, .standardYearly: return L10n.tierStandard
+        case .proMonthly, .proYearly: return L10n.tierPro
         }
     }
-    
+
     var tagline: String {
         switch self {
-        case .free: return "The Hook"
-        case .standardMonthly, .standardYearly: return "The Daily Driver"
-        case .proMonthly, .proYearly: return "The Power User"
+        case .free: return L10n.taglineFree
+        case .standardMonthly, .standardYearly: return L10n.taglineStandard
+        case .proMonthly, .proYearly: return L10n.taglinePro
         }
     }
-    
+
     var monthlyPrice: String {
         switch self {
-        case .free: return "Free"
-        case .standardMonthly: return "$9.99/mo"
-        case .standardYearly: return "$79.99/yr"
-        case .proMonthly: return "$30/mo"
-        case .proYearly: return "$239.99/yr"
+        case .free: return L10n.priceFree
+        case .standardMonthly: return L10n.priceStandardMonthly + L10n.perMonth
+        case .standardYearly: return L10n.priceStandardYearly + L10n.perYear
+        case .proMonthly: return L10n.priceProMonthly + L10n.perMonth
+        case .proYearly: return L10n.priceProYearly + L10n.perYear
         }
     }
-    
+
     var pricePerMonth: String {
         switch self {
-        case .free: return "Free"
-        case .standardMonthly: return "$9.99/mo"
-        case .standardYearly: return "$6.67/mo"
-        case .proMonthly: return "$30/mo"
-        case .proYearly: return "$20/mo"
+        case .free: return L10n.priceFree
+        case .standardMonthly: return L10n.priceStandardMonthly + L10n.perMonth
+        case .standardYearly: return L10n.priceStandardPerMonthYearly + L10n.perMonth
+        case .proMonthly: return L10n.priceProMonthly + L10n.perMonth
+        case .proYearly: return L10n.priceProPerMonthYearly + L10n.perMonth
         }
     }
-    
+
     var billingPeriod: String {
         switch self {
         case .free: return ""
-        case .standardMonthly, .proMonthly: return "Monthly"
-        case .standardYearly, .proYearly: return "Yearly"
+        case .standardMonthly, .proMonthly: return L10n.monthly
+        case .standardYearly, .proYearly: return L10n.yearly
         }
     }
     
@@ -86,9 +86,9 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     /// Human-readable transcription limit
     var transcriptionLimitLabel: String {
         switch baseLevel {
-        case .free: return "15 min/month"
-        case .standard: return "12 hours/month"
-        case .pro: return "36 hours/month"
+        case .free: return L10n.transcriptionLimit15m
+        case .standard: return L10n.transcriptionLimit12h
+        case .pro: return L10n.transcriptionLimit36h
         }
     }
     
@@ -103,9 +103,9 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     
     var maxUploadDurationLabel: String {
         switch baseLevel {
-        case .free: return "Upload locked"
-        case .standard: return "2h max upload"
-        case .pro: return "Unlimited upload"
+        case .free: return L10n.uploadLocked
+        case .standard: return L10n.upload2hMax
+        case .pro: return L10n.uploadUnlimited
         }
     }
     
@@ -119,7 +119,7 @@ enum SubscriptionTier: String, Codable, CaseIterable {
     }
     
     var historyLimitLabel: String {
-        return "Unlimited recordings"
+        return L10n.unlimitedRecordings
     }
     
     /// Summarization quality description
@@ -136,28 +136,28 @@ enum SubscriptionTier: String, Codable, CaseIterable {
         switch baseLevel {
         case .free:
             return [
-                SubscriptionFeature(icon: "mic.fill", text: "Unlimited recordings (always free)"),
-                SubscriptionFeature(icon: "waveform", text: "44kHz recording quality"),
-                SubscriptionFeature(icon: "clock.fill", text: "15 min transcription/month"),
-                SubscriptionFeature(icon: "infinity", text: "Unlimited storage"),
-                SubscriptionFeature(icon: "lock.fill", text: "No AI analysis (upgrade required)")
+                SubscriptionFeature(icon: "mic.fill", text: L10n.featureUnlimitedRecordings),
+                SubscriptionFeature(icon: "waveform", text: L10n.feature44khz),
+                SubscriptionFeature(icon: "clock.fill", text: L10n.feature15minTranscription),
+                SubscriptionFeature(icon: "infinity", text: L10n.featureUnlimitedStorage),
+                SubscriptionFeature(icon: "lock.fill", text: L10n.featureNoAI)
             ]
         case .standard:
             return [
-                SubscriptionFeature(icon: "clock.fill", text: "12 hours transcription/month"),
-                SubscriptionFeature(icon: "cpu", text: "On-device speech recognition (when available)"),
-                SubscriptionFeature(icon: "brain", text: "On-device AI summaries (when available)"),
-                SubscriptionFeature(icon: "person.2.fill", text: "Speaker identification"),
-                SubscriptionFeature(icon: "arrow.up.doc", text: "Upload audio (2h max)"),
-                SubscriptionFeature(icon: "doc.richtext", text: "Export to PDF/Markdown")
+                SubscriptionFeature(icon: "clock.fill", text: L10n.feature12hTranscription),
+                SubscriptionFeature(icon: "cpu", text: L10n.featureOnDeviceSpeech),
+                SubscriptionFeature(icon: "brain", text: L10n.featureOnDeviceSummaries),
+                SubscriptionFeature(icon: "person.2.fill", text: L10n.featureSpeakerID),
+                SubscriptionFeature(icon: "arrow.up.doc", text: L10n.featureUpload2h),
+                SubscriptionFeature(icon: "doc.richtext", text: L10n.featureExportPDF)
             ]
         case .pro:
             return [
-                SubscriptionFeature(icon: "clock.badge.checkmark", text: "36 hours transcription/month"),
-                SubscriptionFeature(icon: "bolt.fill", text: "Priority processing"),
-                SubscriptionFeature(icon: "arrow.up.doc", text: "Unlimited upload size"),
-                SubscriptionFeature(icon: "magnifyingglass", text: "Audio search"),
-                SubscriptionFeature(icon: "checkmark.seal.fill", text: "Everything in Standard")
+                SubscriptionFeature(icon: "clock.badge.checkmark", text: L10n.feature36hTranscription),
+                SubscriptionFeature(icon: "bolt.fill", text: L10n.featurePriority),
+                SubscriptionFeature(icon: "arrow.up.doc", text: L10n.featureUnlimitedUpload),
+                SubscriptionFeature(icon: "magnifyingglass", text: L10n.featureAudioSearch),
+                SubscriptionFeature(icon: "checkmark.seal.fill", text: L10n.featureEverythingStandard)
             ]
         }
     }
@@ -187,13 +187,13 @@ enum CreditPack: String, CaseIterable {
     
     var displayName: String {
         switch self {
-        case .privacyPack: return "Privacy Pack"
+        case .privacyPack: return L10n.privacyPack
         }
     }
-    
+
     var tagline: String {
         switch self {
-        case .privacyPack: return "Transcribe on your phone"
+        case .privacyPack: return L10n.transcribeOnPhone
         }
     }
     
@@ -332,10 +332,10 @@ final class SubscriptionManager {
             let creditHours = Int(usage.creditSeconds) / 3600
             let creditMinutes = (Int(usage.creditSeconds) % 3600) / 60
             let creditString = creditHours > 0 ? "\(creditHours)h \(creditMinutes)m" : "\(creditMinutes)m"
-            return "\(timeString) (\(creditString) credits)"
+            return "\(timeString) (+\(creditString))"
         }
-        
-        return "\(timeString) remaining"
+
+        return "\(timeString)"
     }
     
     /// Usage percentage (0.0 - 1.0)

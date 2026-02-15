@@ -10,7 +10,14 @@ import UIKit
 import AppKit
 #endif
 
-private let logger = Logger(subsystem: "com.Proceduralabs.Signal", category: "Transcription")
+private let logger = Logger(subsystem: "com.Proceduralabs.Trace", category: "Transcription")
+
+// MARK: - Pending Date Action
+
+private enum PendingDateAction {
+    case reminder(index: Int, title: String, recordingTitle: String)
+    case calendarEvent(index: Int, title: String, duration: TimeInterval, recordingTitle: String)
+}
 
 // MARK: - Decoded View (The Output)
 
@@ -70,10 +77,23 @@ struct DecodedView: View {
     // Transcription method chooser
     @State private var showTranscriptionChooser = false
 
+    // Smart actions tracking
+    @State private var createdReminders: Set<Int> = []
+    @State private var createdEvents: Set<Int> = []
+    @State private var showActionToast = false
+    @State private var actionToastText = ""
+    @State private var showDatePicker = false
+    @State private var datePickerDate = Date()
+    @State private var pendingDatePickerItem: PendingDateAction?
+
     // Audio compression
     @State private var isCompressing = false
     @State private var compressionResult: String?
     
+    // Chat → transcript highlight navigation
+    @State private var highlightedSegmentIndex: Int?
+    @State private var scrollToSegmentIndex: Int?
+
     // Adaptive layout
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -91,7 +111,24 @@ struct DecodedView: View {
             if showCopiedToast {
                 VStack {
                     Spacer()
-                    Text("COPIED")
+                    Text(L10n.copied)
+                        .font(AppFont.mono(size: 12, weight: .bold))
+                        .kerning(1.5)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .glassCard(radius: 8)
+                        .padding(.bottom, 40)
+                }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .allowsHitTesting(false)
+            }
+
+            // Smart action toast overlay
+            if showActionToast {
+                VStack {
+                    Spacer()
+                    Text(actionToastText.uppercased())
                         .font(AppFont.mono(size: 12, weight: .bold))
                         .kerning(1.5)
                         .foregroundStyle(.white)
@@ -112,49 +149,66 @@ struct DecodedView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("DECODED")
+                Text(L10n.decodedTitle)
                     .font(AppFont.mono(size: 13, weight: .semibold))
                     .kerning(2.0)
                     .foregroundStyle(.white)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                toolbarMenu
+                HStack(spacing: 4) {
+                    if recording.hasTranscript {
+                        Button {
+                            if FeatureGate.canAccess(.audioSearch) {
+                                showAudioSearch = true
+                            } else {
+                                showPaywall = true
+                            }
+                        } label: {
+                            Image(systemName: "bubble.left.and.text.bubble.right")
+                                .font(.system(size: 15))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    toolbarMenu
+                }
             }
         }
-        .alert("Delete Transcript?", isPresented: $showDeleteTranscriptConfirmation) {
-            Button("Delete", role: .destructive) {
+        .alert(L10n.delete + "?", isPresented: $showDeleteTranscriptConfirmation) {
+            Button(L10n.delete, role: .destructive) {
                 deleteTranscript()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.cancel, role: .cancel) {}
         } message: {
-            Text("This will remove the transcript and summary. The audio recording will be kept.")
+            Text(L10n.deleteTranscriptMessage)
         }
-        .alert("Rename Recording", isPresented: $showRenameAlert) {
-            TextField("Title", text: $renameText)
-            Button("Save") {
+        .alert(L10n.renameRecording, isPresented: $showRenameAlert) {
+            TextField(L10n.renameRecording, text: $renameText)
+            Button(L10n.save) {
                 let trimmed = renameText.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty {
                     recording.title = trimmed
                     // Also rename the audio file if desired
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.cancel, role: .cancel) {}
         } message: {
-            Text("Enter a new name for this recording.")
+            Text(L10n.enterNewName)
         }
-        .alert("Delete Recording?", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
+        .alert(L10n.deleteRecording + "?", isPresented: $showDeleteConfirmation) {
+            Button(L10n.delete, role: .destructive) {
                 if let url = recording.audioURL {
                     try? FileManager.default.removeItem(at: url)
                 }
                 modelContext.delete(recording)
                 dismiss()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L10n.cancel, role: .cancel) {}
         } message: {
-            Text("This will permanently delete the recording and its audio file.")
+            Text(L10n.deleteRecordingMessage)
         }
-        .sheet(isPresented: $showShareSheet) {
+        .sheet(isPresented: $showShareSheet, onDismiss: {
+            shareItems = []
+        }) {
             ShareSheet(items: shareItems)
         }
         .sheet(isPresented: $showPaywall) {
@@ -162,7 +216,69 @@ struct DecodedView: View {
         }
 
         .sheet(isPresented: $showAudioSearch) {
-            AudioSearchView(recording: recording)
+            AskAudioView(recording: recording) { segmentIndex in
+                showAudioSearch = false
+                selectedTab = 1 // Switch to TRANSCRIPT tab
+                scrollToSegmentIndex = segmentIndex
+                highlightedSegmentIndex = segmentIndex
+                Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        highlightedSegmentIndex = nil
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showDatePicker) {
+            NavigationStack {
+                VStack(spacing: 24) {
+                    Text(L10n.pickDateTime)
+                        .font(AppFont.mono(size: 13, weight: .bold))
+                        .kerning(1.5)
+                        .foregroundStyle(.white)
+
+                    DatePicker("", selection: $datePickerDate, displayedComponents: [.date, .hourAndMinute])
+                        .datePickerStyle(.graphical)
+                        .tint(.white)
+                        .labelsHidden()
+
+                    Button {
+                        showDatePicker = false
+                        if let item = pendingDatePickerItem {
+                            let pickedDate = datePickerDate
+                            switch item {
+                            case .reminder(let index, let title, let recordingTitle):
+                                createReminder(index: index, title: title, dueDate: pickedDate, recordingTitle: recordingTitle)
+                            case .calendarEvent(let index, let title, let duration, let recordingTitle):
+                                createCalendarEvent(index: index, title: title, startDate: pickedDate, duration: duration, recordingTitle: recordingTitle)
+                            }
+                            pendingDatePickerItem = nil
+                        }
+                    } label: {
+                        Text(L10n.confirm)
+                            .font(AppFont.mono(size: 14, weight: .bold))
+                            .kerning(1.5)
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: AppLayout.inputRadius))
+                    }
+                }
+                .padding(AppLayout.horizontalPadding)
+                .background(Color.black.ignoresSafeArea())
+                .preferredColorScheme(.dark)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(L10n.cancel) {
+                            showDatePicker = false
+                            pendingDatePickerItem = nil
+                        }
+                        .font(AppFont.mono(size: 13))
+                    }
+                }
+            }
+            .presentationDetents([.large])
         }
         .sheet(isPresented: $showTranscriptionChooser) {
             TranscriptionMethodChooser(
@@ -188,7 +304,7 @@ struct DecodedView: View {
         .onAppear {
             // Load audio into shared player for transcript sync
             if let url = recording.audioURL {
-                sharedPlayer.load(url: url)
+                sharedPlayer.load(url: url, title: recording.title)
             }
         }
         .onDisappear {
@@ -216,20 +332,30 @@ struct DecodedView: View {
                 .padding(.horizontal, AppLayout.horizontalPadding)
                 .padding(.bottom, 24)
 
-            ScrollView {
-                Group {
-                    switch selectedTab {
-                    case 0: distillationTab
-                    case 1: transcriptTab
-                    case 2: notesTab
-                    case 3: audioTab
-                    default: EmptyView()
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    Group {
+                        switch selectedTab {
+                        case 0: distillationTab
+                        case 1: transcriptTab
+                        case 2: notesTab
+                        case 3: audioTab
+                        default: EmptyView()
+                        }
+                    }
+                    .padding(.horizontal, AppLayout.horizontalPadding)
+                    .padding(.bottom, 40)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: scrollToSegmentIndex) { _, newValue in
+                    if let idx = newValue {
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            scrollProxy.scrollTo("segment_\(idx)", anchor: .center)
+                        }
+                        scrollToSegmentIndex = nil
                     }
                 }
-                .padding(.horizontal, AppLayout.horizontalPadding)
-                .padding(.bottom, 40)
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
     }
 
@@ -348,7 +474,7 @@ struct DecodedView: View {
                     // Audio player (always visible)
                     if !recording.amplitudeSamples.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            TrackedLabel("PLAYBACK", size: 10, kerning: 1.5)
+                            TrackedLabel(L10n.playback, size: 10, kerning: 1.5)
                             PlaybackWaveformView(
                                 samples: recording.amplitudeSamples,
                                 duration: recording.duration,
@@ -364,16 +490,26 @@ struct DecodedView: View {
                     // Transcript (scrollable)
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 8) {
-                            TrackedLabel("TRANSCRIPT", size: 10, kerning: 1.5)
+                            TrackedLabel(L10n.transcript, size: 10, kerning: 1.5)
                             if recording.wasTranscribedOnDevice == true {
                                 OnDeviceBadge(type: .transcription, compact: true)
                             }
                         }
-                        
-                        ScrollView {
-                            wideTranscriptContent
+
+                        ScrollViewReader { scrollProxy in
+                            ScrollView {
+                                wideTranscriptContent
+                            }
+                            .frame(maxHeight: .infinity)
+                            .onChange(of: scrollToSegmentIndex) { _, newValue in
+                                if let idx = newValue {
+                                    withAnimation(.easeInOut(duration: 0.4)) {
+                                        scrollProxy.scrollTo("segment_\(idx)", anchor: .center)
+                                    }
+                                    scrollToSegmentIndex = nil
+                                }
+                            }
                         }
-                        .frame(maxHeight: .infinity)
                     }
                     .padding(20)
                     .glassCard(radius: 14)
@@ -386,7 +522,7 @@ struct DecodedView: View {
                     // Summary/Distillation
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 8) {
-                            TrackedLabel("DISTILLATION", size: 10, kerning: 1.5)
+                            TrackedLabel(L10n.distillation, size: 10, kerning: 1.5)
                             if recording.wasSummarizedOnDevice == true {
                                 OnDeviceBadge(type: .summarization, compact: true)
                             }
@@ -402,7 +538,7 @@ struct DecodedView: View {
                     
                     // Notes
                     VStack(alignment: .leading, spacing: 12) {
-                        TrackedLabel("NOTES", size: 10, kerning: 1.5)
+                        TrackedLabel(L10n.notes, size: 10, kerning: 1.5)
                         
                         wideNotesContent
                     }
@@ -440,7 +576,7 @@ struct DecodedView: View {
                         Label(lang.uppercased(), systemImage: "globe")
                     }
                     if recording.uniqueSpeakers.count > 0 {
-                        Label("\(recording.uniqueSpeakers.count) speakers", systemImage: "person.2.fill")
+                        Label("\(recording.uniqueSpeakers.count) \(L10n.speakers)", systemImage: "person.2.fill")
                     }
                 }
                 .font(AppFont.mono(size: 12, weight: .regular))
@@ -456,7 +592,7 @@ struct DecodedView: View {
                         ProgressView()
                             .scaleEffect(0.7)
                             .tint(.white)
-                        Text("TRANSCRIBING")
+                        Text(L10n.transcribing)
                             .font(AppFont.mono(size: 11, weight: .semibold))
                             .kerning(1.0)
                             .foregroundStyle(.white)
@@ -483,7 +619,7 @@ struct DecodedView: View {
                         ProgressView()
                             .scaleEffect(0.7)
                             .tint(.white)
-                        Text("SUMMARIZING")
+                        Text(L10n.summarizing)
                             .font(AppFont.mono(size: 11, weight: .semibold))
                             .kerning(1.0)
                             .foregroundStyle(.white)
@@ -500,7 +636,7 @@ struct DecodedView: View {
                                 Image(systemName: "lock.fill")
                                     .font(.system(size: 10))
                             }
-                            Text(SubscriptionManager.shared.canTranscribeAtAll ? "TRANSCRIBE" : "UNLOCK TRANSCRIPTION")
+                            Text(SubscriptionManager.shared.canTranscribeAtAll ? L10n.transcribe.uppercased() : L10n.unlockTranscription)
                                 .font(AppFont.mono(size: 11, weight: .bold))
                                 .kerning(1.5)
                         }
@@ -514,7 +650,7 @@ struct DecodedView: View {
                     Button {
                         summarize()
                     } label: {
-                        Text("SUMMARIZE")
+                        Text(L10n.summarize.uppercased())
                             .font(AppFont.mono(size: 11, weight: .bold))
                             .kerning(1.5)
                             .foregroundStyle(.black)
@@ -564,14 +700,15 @@ struct DecodedView: View {
             // Segments
             VStack(spacing: 8) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
-                    wideTranscriptRow(segment, index: index, isActive: currentSegmentIndex == index)
+                    wideTranscriptRow(segment, index: index, isActive: currentSegmentIndex == index, isHighlighted: highlightedSegmentIndex == index)
+                        .id("segment_\(index)")
                 }
             }
         } else if recording.isTranscribing {
             VStack(spacing: 12) {
                 ProgressView()
                     .tint(.white)
-                Text("Transcribing...")
+                Text(L10n.transcribing)
                     .font(AppFont.mono(size: 12))
                     .foregroundStyle(.gray)
 
@@ -600,7 +737,7 @@ struct DecodedView: View {
                 Button {
                     cancelTranscription()
                 } label: {
-                    Text("CANCEL")
+                    Text(L10n.cancel.uppercased())
                         .font(AppFont.mono(size: 10, weight: .bold))
                         .kerning(1.0)
                         .foregroundStyle(.white.opacity(0.6))
@@ -617,7 +754,7 @@ struct DecodedView: View {
                 Image(systemName: "text.alignleft")
                     .font(.system(size: 24, weight: .thin))
                     .foregroundStyle(Color.muted)
-                Text("No transcript yet")
+                Text(L10n.noTranscriptYet)
                     .font(AppFont.mono(size: 12))
                     .foregroundStyle(.gray)
             }
@@ -626,9 +763,36 @@ struct DecodedView: View {
         }
     }
     
-    private func wideTranscriptRow(_ segment: SegmentData, index: Int, isActive: Bool) -> some View {
+    private func wideTranscriptRow(_ segment: SegmentData, index: Int, isActive: Bool, isHighlighted: Bool = false) -> some View {
+        let bgColor: Color = isHighlighted ? Color.yellow.opacity(0.15) : (isActive ? Color.white.opacity(0.08) : Color.clear)
+        let borderColor: Color = isHighlighted ? Color.yellow.opacity(0.4) : Color.clear
+        let textColor: Color = isActive ? .white : .gray
+
+        return wideTranscriptRowContent(segment, index: index, isActive: isActive, textColor: textColor)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(bgColor)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .animation(.easeOut(duration: 0.5), value: isHighlighted)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if recording.duration > 0 {
+                    let fraction = CGFloat(segment.timestamp / recording.duration)
+                    sharedPlayer.seek(to: fraction)
+                    if !sharedPlayer.isPlaying {
+                        sharedPlayer.play()
+                    }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func wideTranscriptRowContent(_ segment: SegmentData, index: Int, isActive: Bool, textColor: Color) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            // Timestamp + play indicator
             VStack(alignment: .trailing, spacing: 4) {
                 if isActive {
                     Image(systemName: "waveform")
@@ -641,8 +805,7 @@ struct DecodedView: View {
                     .foregroundStyle(Color.muted)
             }
             .frame(width: 50, alignment: .trailing)
-            
-            // Content
+
             VStack(alignment: .leading, spacing: 4) {
                 if !segment.speaker.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text(recording.displayName(for: segment.speaker))
@@ -652,13 +815,12 @@ struct DecodedView: View {
 
                 Text(segment.text)
                     .font(AppFont.mono(size: 13, weight: .regular))
-                    .foregroundStyle(isActive ? .white : .gray)
+                    .foregroundStyle(textColor)
                     .lineSpacing(3)
             }
-            
+
             Spacer()
-            
-            // Edit button
+
             Button {
                 editingSegmentIndex = index
                 editingSegmentText = segment.text
@@ -668,29 +830,15 @@ struct DecodedView: View {
                     .foregroundStyle(.white.opacity(0.3))
             }
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(isActive ? Color.white.opacity(0.08) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if recording.duration > 0 {
-                let fraction = CGFloat(segment.timestamp / recording.duration)
-                sharedPlayer.seek(to: fraction)
-                if !sharedPlayer.isPlaying {
-                    sharedPlayer.play()
-                }
-            }
-        }
     }
-    
+
     @ViewBuilder
     private var wideDistillationContent: some View {
         if let summary = recording.summary {
             VStack(alignment: .leading, spacing: 20) {
                 // One-liner
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("THE ONE-LINER")
+                    Text(L10n.theOneLiner)
                         .font(AppFont.mono(size: 9, weight: .medium))
                         .kerning(1.0)
                         .foregroundStyle(.gray)
@@ -703,7 +851,7 @@ struct DecodedView: View {
                 // Action vectors
                 if !summary.actionVectors.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("ACTION VECTORS")
+                        Text(L10n.actionVectors)
                             .font(AppFont.mono(size: 9, weight: .medium))
                             .kerning(1.0)
                             .foregroundStyle(.gray)
@@ -738,7 +886,7 @@ struct DecodedView: View {
                 
                 // Context
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("CONTEXT")
+                    Text(L10n.context)
                         .font(AppFont.mono(size: 9, weight: .medium))
                         .kerning(1.0)
                         .foregroundStyle(.gray)
@@ -747,64 +895,12 @@ struct DecodedView: View {
                         .foregroundStyle(.gray)
                         .lineSpacing(4)
                 }
-                
-                // Sources
-                if !summary.sources.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("SOURCES")
-                            .font(AppFont.mono(size: 9, weight: .medium))
-                            .kerning(1.0)
-                            .foregroundStyle(.gray)
-                        
-                        ForEach(summary.sources) { source in
-                            Button {
-                                // Seek to this timestamp
-                                if recording.duration > 0 {
-                                    let fraction = CGFloat(source.timestamp / recording.duration)
-                                    sharedPlayer.seek(to: fraction)
-                                    if !sharedPlayer.isPlaying {
-                                        sharedPlayer.play()
-                                    }
-                                }
-                            } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: "waveform")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(.white.opacity(0.5))
-                                        .frame(width: 16)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(source.description)
-                                            .font(AppFont.mono(size: 12, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.8))
-                                            .multilineTextAlignment(.leading)
-                                        
-                                        Text(source.timestamp.formatted)
-                                            .font(AppFont.mono(size: 10, weight: .medium))
-                                            .foregroundStyle(.gray)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    Image(systemName: "play.circle")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(.white.opacity(0.5))
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 10)
-                                .background(Color.white.opacity(0.05))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
             }
         } else if recording.isSummarizing {
             VStack(spacing: 12) {
                 ProgressView()
                     .tint(.white)
-                Text("Summarizing...")
+                Text(L10n.summarizing)
                     .font(AppFont.mono(size: 12))
                     .foregroundStyle(.gray)
             }
@@ -815,7 +911,7 @@ struct DecodedView: View {
                 Image(systemName: "brain")
                     .font(.system(size: 24, weight: .thin))
                     .foregroundStyle(Color.muted)
-                Text("Ready to summarize")
+                Text(L10n.readyToSummarize)
                     .font(AppFont.mono(size: 12))
                     .foregroundStyle(.gray)
             }
@@ -826,7 +922,7 @@ struct DecodedView: View {
                 Image(systemName: "brain")
                     .font(.system(size: 24, weight: .thin))
                     .foregroundStyle(Color.muted)
-                Text("Transcribe first to unlock summarization")
+                Text(L10n.transcribeFirstToUnlock)
                     .font(AppFont.mono(size: 12))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
@@ -853,7 +949,7 @@ struct DecodedView: View {
             
             // Image attachments
             HStack {
-                Text("ATTACHMENTS")
+                Text(L10n.attachments)
                     .font(AppFont.mono(size: 9, weight: .medium))
                     .kerning(1.0)
                     .foregroundStyle(.gray)
@@ -907,7 +1003,7 @@ struct DecodedView: View {
                 recording.isStarred.toggle()
             } label: {
                 Label(
-                    recording.isStarred ? "Unstar" : "Star",
+                    recording.isStarred ? L10n.unstar : L10n.star,
                     systemImage: recording.isStarred ? "star.slash" : "star"
                 )
             }
@@ -916,14 +1012,14 @@ struct DecodedView: View {
                 renameText = recording.title
                 showRenameAlert = true
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label(L10n.rename, systemImage: "pencil")
             }
 
             if recording.isTranscribing {
                 Button(role: .destructive) {
                     cancelTranscription()
                 } label: {
-                    Label("Cancel Transcription", systemImage: "xmark.circle")
+                    Label(L10n.cancelTranscription, systemImage: "xmark.circle")
                 }
             }
 
@@ -931,7 +1027,7 @@ struct DecodedView: View {
                 Button {
                     transcribe()
                 } label: {
-                    Label("Transcribe", systemImage: "waveform.badge.magnifyingglass")
+                    Label(L10n.transcribe, systemImage: "waveform.badge.magnifyingglass")
                 }
             }
 
@@ -939,7 +1035,7 @@ struct DecodedView: View {
                 Button {
                     summarize()
                 } label: {
-                    Label("Summarize", systemImage: "brain")
+                    Label(L10n.summarize, systemImage: "brain")
                 }
             }
 
@@ -949,18 +1045,18 @@ struct DecodedView: View {
                 Button {
                     transcribe()
                 } label: {
-                    Label("Re-transcribe", systemImage: "arrow.clockwise")
+                    Label(L10n.retranscribe, systemImage: "arrow.clockwise")
                 }
 
                 Button(role: .destructive) {
                     showDeleteTranscriptConfirmation = true
                 } label: {
-                    Label("Delete Transcript", systemImage: "text.badge.minus")
+                    Label(L10n.deleteTranscript, systemImage: "text.badge.minus")
                 }
 
                 Divider()
                 
-                // Audio Search - Pro only
+                // Ask Your Audio - Pro only
                 Button {
                     if FeatureGate.canAccess(.audioSearch) {
                         showAudioSearch = true
@@ -968,7 +1064,7 @@ struct DecodedView: View {
                         showPaywall = true
                     }
                 } label: {
-                    Label("Search Transcript", systemImage: "magnifyingglass")
+                    Label(L10n.askYourAudio, systemImage: "bubble.left.and.text.bubble.right")
                 }
             }
 
@@ -978,13 +1074,13 @@ struct DecodedView: View {
                 Button {
                     shareAudio()
                 } label: {
-                    Label("Share Audio", systemImage: "square.and.arrow.up")
+                    Label(L10n.shareAudio, systemImage: "square.and.arrow.up")
                 }
                 
                 Button {
-                    shareSignalPackage()
+                    shareTracePackage()
                 } label: {
-                    Label("Share Signal Package", systemImage: "shippingbox")
+                    Label(L10n.shareTracePackage, systemImage: "shippingbox")
                 }
             }
 
@@ -992,7 +1088,7 @@ struct DecodedView: View {
                 Button {
                     copyTranscript()
                 } label: {
-                    Label("Copy Transcript", systemImage: "doc.on.doc")
+                    Label(L10n.copyTranscript, systemImage: "doc.on.doc")
                 }
 
                 // Export options - Standard+ only
@@ -1004,7 +1100,7 @@ struct DecodedView: View {
                             showPaywall = true
                         }
                     } label: {
-                        Label("Export as Markdown", systemImage: "doc.text")
+                        Label(L10n.exportAsMarkdown, systemImage: "doc.text")
                     }
                     
                     Button {
@@ -1014,21 +1110,21 @@ struct DecodedView: View {
                             showPaywall = true
                         }
                     } label: {
-                        Label("Export as PDF", systemImage: "doc.richtext")
+                        Label(L10n.exportAsPDF, systemImage: "doc.richtext")
                     }
                     
                     Divider()
                     
                     Button {
-                        if let text = recording.transcriptFullText {
+                        if let text = formattedTranscriptText() {
                             shareItems = [text]
                             showShareSheet = true
                         }
                     } label: {
-                        Label("Share as Text", systemImage: "square.and.arrow.up")
+                        Label(L10n.shareAsText, systemImage: "square.and.arrow.up")
                     }
                 } label: {
-                    Label("Export Transcript", systemImage: "arrow.up.doc")
+                    Label(L10n.exportTranscript, systemImage: "arrow.up.doc")
                 }
             }
 
@@ -1037,7 +1133,7 @@ struct DecodedView: View {
             Button(role: .destructive) {
                 showDeleteConfirmation = true
             } label: {
-                Label("Delete Recording", systemImage: "trash")
+                Label(L10n.deleteRecording, systemImage: "trash")
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -1127,7 +1223,7 @@ struct DecodedView: View {
                     Button {
                         cancelTranscription()
                     } label: {
-                        Text("CANCEL")
+                        Text(L10n.cancel.uppercased())
                             .font(AppFont.mono(size: 10, weight: .bold))
                             .kerning(1.0)
                             .foregroundStyle(.white.opacity(0.6))
@@ -1176,7 +1272,7 @@ struct DecodedView: View {
 
             Spacer()
 
-            Button("Retry") { transcribe() }
+            Button(L10n.retry) { transcribe() }
                 .font(AppFont.mono(size: 11, weight: .bold))
                 .foregroundStyle(.white)
         }
@@ -1193,10 +1289,10 @@ struct DecodedView: View {
     private var tabSelector: some View {
         GlassEffectContainer(spacing: 4) {
             HStack(spacing: 4) {
-                tabButton("DISTILL", index: 0)
-                tabButton("TRANSCRIPT", index: 1)
-                tabButton("NOTES", index: 2)
-                tabButton("AUDIO", index: 3)
+                tabButton(L10n.distill, index: 0)
+                tabButton(L10n.transcript, index: 1)
+                tabButton(L10n.notes, index: 2)
+                tabButton(L10n.audio, index: 3)
             }
             .padding(4)
         }
@@ -1230,7 +1326,7 @@ struct DecodedView: View {
             if let summary = recording.summary {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        TrackedLabel("THE ONE-LINER", size: 10, kerning: 1.5)
+                        TrackedLabel(L10n.theOneLiner, size: 10, kerning: 1.5)
                         if recording.wasSummarizedOnDevice == true {
                             OnDeviceBadge(type: .summarization, compact: true)
                         }
@@ -1242,65 +1338,95 @@ struct DecodedView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    TrackedLabel("ACTION VECTORS", size: 10, kerning: 1.5)
+                    TrackedLabel(L10n.actionVectors, size: 10, kerning: 1.5)
                     ForEach(summary.actionVectors) { action in
                         actionRow(action)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    TrackedLabel("CONTEXT", size: 10, kerning: 1.5)
+                    TrackedLabel(L10n.context, size: 10, kerning: 1.5)
                     Text(summary.context)
                         .font(AppFont.mono(size: 14, weight: .regular))
                         .foregroundStyle(.gray)
                         .lineSpacing(5)
                 }
-                
-                // Sources
-                if !summary.sources.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        TrackedLabel("SOURCES", size: 10, kerning: 1.5)
-                        
-                        ForEach(summary.sources) { source in
+
+                // Emails
+                if !summary.emails.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        TrackedLabel(L10n.emails, size: 10, kerning: 1.5)
+                        ForEach(summary.emails) { email in
                             Button {
-                                // Seek to this timestamp
-                                if recording.duration > 0 {
-                                    let fraction = CGFloat(source.timestamp / recording.duration)
-                                    sharedPlayer.seek(to: fraction)
-                                    if !sharedPlayer.isPlaying {
-                                        sharedPlayer.play()
-                                    }
-                                }
+                                openMailto(recipient: email.recipient, subject: email.subject, body: email.body)
                             } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: "waveform")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(.white.opacity(0.5))
-                                        .frame(width: 16)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(source.description)
-                                            .font(AppFont.mono(size: 13, weight: .regular))
-                                            .foregroundStyle(.white.opacity(0.8))
-                                            .multilineTextAlignment(.leading)
-                                        
-                                        Text(source.timestamp.formatted)
-                                            .font(AppFont.mono(size: 11, weight: .medium))
-                                            .foregroundStyle(.gray)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    Image(systemName: "play.circle")
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(.white.opacity(0.5))
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 12)
-                                .background(Color.white.opacity(0.05))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                smartActionCard(
+                                    icon: "envelope.fill",
+                                    iconColor: .blue,
+                                    title: "Email \(email.recipient)",
+                                    subtitle: email.subject,
+                                    trailing: "arrow.up.right"
+                                )
                             }
                             .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // Reminders
+                if !summary.reminders.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        TrackedLabel(L10n.reminders, size: 10, kerning: 1.5)
+                        ForEach(Array(summary.reminders.enumerated()), id: \.element.id) { index, reminder in
+                            Button {
+                                if createdReminders.contains(index) { return }
+                                if reminder.dueDate != nil {
+                                    createReminder(index: index, title: reminder.title, dueDate: reminder.dueDate, recordingTitle: recording.title)
+                                } else {
+                                    datePickerDate = Date()
+                                    pendingDatePickerItem = .reminder(index: index, title: reminder.title, recordingTitle: recording.title)
+                                    showDatePicker = true
+                                }
+                            } label: {
+                                smartActionCard(
+                                    icon: createdReminders.contains(index) ? "checkmark.circle.fill" : "bell.fill",
+                                    iconColor: createdReminders.contains(index) ? .green : .orange,
+                                    title: reminder.title,
+                                    subtitle: reminder.dueDescription,
+                                    trailing: createdReminders.contains(index) ? nil : "plus.circle"
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .opacity(createdReminders.contains(index) ? 0.6 : 1)
+                        }
+                    }
+                }
+
+                // Calendar Events
+                if !summary.calendarEvents.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        TrackedLabel(L10n.calendarEvents, size: 10, kerning: 1.5)
+                        ForEach(Array(summary.calendarEvents.enumerated()), id: \.element.id) { index, event in
+                            Button {
+                                if createdEvents.contains(index) { return }
+                                if let eventDate = event.eventDate {
+                                    createCalendarEvent(index: index, title: event.title, startDate: eventDate, duration: event.duration ?? 3600, recordingTitle: recording.title)
+                                } else {
+                                    datePickerDate = Date()
+                                    pendingDatePickerItem = .calendarEvent(index: index, title: event.title, duration: event.duration ?? 3600, recordingTitle: recording.title)
+                                    showDatePicker = true
+                                }
+                            } label: {
+                                smartActionCard(
+                                    icon: createdEvents.contains(index) ? "checkmark.circle.fill" : "calendar.badge.plus",
+                                    iconColor: createdEvents.contains(index) ? .green : .purple,
+                                    title: event.title,
+                                    subtitle: event.dateDescription,
+                                    trailing: createdEvents.contains(index) ? nil : "plus.circle"
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .opacity(createdEvents.contains(index) ? 0.6 : 1)
                         }
                     }
                 }
@@ -1308,7 +1434,7 @@ struct DecodedView: View {
                 callToAction(
                     icon: "brain",
                     title: "SUMMARIZING",
-                    subtitle: "Distilling your meeting into key signals...",
+                    subtitle: "Distilling your meeting into key insights...",
                     action: nil
                 )
             } else if recording.hasTranscript && recording.summarizationError != nil {
@@ -1325,22 +1451,22 @@ struct DecodedView: View {
                 callToAction(
                     icon: "brain",
                     title: "READY TO DECODE",
-                    subtitle: "Transcript available. Tap to distill key signals.",
+                    subtitle: "Transcript available. Tap to distill key insights.",
                     action: ("SUMMARIZE", summarize)
                 )
             } else if recording.isTranscribing {
                 callToAction(
                     icon: "waveform.badge.magnifyingglass",
-                    title: "TRANSCRIBING",
-                    subtitle: "Processing your recording...",
-                    action: ("CANCEL", cancelTranscription)
+                    title: L10n.statusTranscribingTitle,
+                    subtitle: L10n.processingRecording,
+                    action: (L10n.cancel.uppercased(), cancelTranscription)
                 )
             } else {
                 callToAction(
                     icon: SubscriptionManager.shared.canTranscribeAtAll ? "waveform.badge.magnifyingglass" : "lock.fill",
-                    title: SubscriptionManager.shared.canTranscribeAtAll ? "NOT YET DECODED" : "TRANSCRIPTION LOCKED",
-                    subtitle: SubscriptionManager.shared.canTranscribeAtAll ? "Transcribe this recording to extract signals." : "Upgrade to unlock AI transcription and summaries.",
-                    action: (SubscriptionManager.shared.canTranscribeAtAll ? "TRANSCRIBE" : "UNLOCK TRANSCRIPTION", transcribe)
+                    title: SubscriptionManager.shared.canTranscribeAtAll ? L10n.notYetDecoded : L10n.transcriptionLocked,
+                    subtitle: SubscriptionManager.shared.canTranscribeAtAll ? L10n.transcribeToExtract : L10n.upgradeToUnlockAI,
+                    action: (SubscriptionManager.shared.canTranscribeAtAll ? L10n.transcribe.uppercased() : L10n.unlockTranscription, transcribe)
                 )
             }
         }
@@ -1369,7 +1495,7 @@ struct DecodedView: View {
                 // Speaker section — always show if there are speakers
                 if !recording.uniqueSpeakers.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        TrackedLabel("\(recording.uniqueSpeakers.count) SPEAKER\(recording.uniqueSpeakers.count == 1 ? "" : "S")", size: 10, kerning: 1.5)
+                        TrackedLabel("\(recording.uniqueSpeakers.count) \(L10n.speakers.uppercased())", size: 10, kerning: 1.5)
 
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
@@ -1405,14 +1531,15 @@ struct DecodedView: View {
                     .padding(.bottom, 8)
                 }
 
-                Text("\(segments.count) SEGMENTS")
+                Text("\(segments.count) \(L10n.segments)")
                     .font(AppFont.mono(size: 10, weight: .medium))
                     .kerning(1.0)
                     .foregroundStyle(.gray)
                     .padding(.bottom, 4)
 
                 ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
-                    transcriptRow(segment, index: index, isActive: currentSegmentIndex == index)
+                    transcriptRow(segment, index: index, isActive: currentSegmentIndex == index, isHighlighted: highlightedSegmentIndex == index)
+                        .id("segment_\(index)")
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 withAnimation { deleteSegment(at: index) }
@@ -1424,25 +1551,25 @@ struct DecodedView: View {
             } else if recording.isTranscribing {
                 callToAction(
                     icon: "waveform.badge.magnifyingglass",
-                    title: "TRANSCRIBING",
-                    subtitle: "Your transcript will appear here.",
-                    action: ("CANCEL", cancelTranscription)
+                    title: L10n.statusTranscribingTitle,
+                    subtitle: L10n.processingRecording,
+                    action: (L10n.cancel.uppercased(), cancelTranscription)
                 )
             } else {
                 callToAction(
                     icon: SubscriptionManager.shared.canTranscribeAtAll ? "text.alignleft" : "lock.fill",
-                    title: SubscriptionManager.shared.canTranscribeAtAll ? "NO TRANSCRIPT" : "TRANSCRIPTION LOCKED",
-                    subtitle: SubscriptionManager.shared.canTranscribeAtAll ? "Transcribe this recording first." : "Upgrade to unlock AI transcription.",
-                    action: (SubscriptionManager.shared.canTranscribeAtAll ? "TRANSCRIBE" : "UNLOCK TRANSCRIPTION", transcribe)
+                    title: SubscriptionManager.shared.canTranscribeAtAll ? L10n.noTranscriptTitle : L10n.transcriptionLocked,
+                    subtitle: SubscriptionManager.shared.canTranscribeAtAll ? L10n.transcribeFirst : L10n.upgradeToUnlockTranscription,
+                    action: (SubscriptionManager.shared.canTranscribeAtAll ? L10n.transcribe.uppercased() : L10n.unlockTranscription, transcribe)
                 )
             }
         }
-        .alert("Rename Speaker", isPresented: Binding(
+        .alert(L10n.renameSpeaker, isPresented: Binding(
             get: { editingSpeaker != nil },
             set: { if !$0 { editingSpeaker = nil } }
         )) {
-            TextField("Name", text: $editingSpeakerName)
-            Button("Save") {
+            TextField(L10n.name, text: $editingSpeakerName)
+            Button(L10n.save) {
                 if let speaker = editingSpeaker {
                     var names = recording.speakerNames ?? [:]
                     let trimmed = editingSpeakerName.trimmingCharacters(in: .whitespaces)
@@ -1455,9 +1582,9 @@ struct DecodedView: View {
                 }
                 editingSpeaker = nil
             }
-            Button("Cancel", role: .cancel) { editingSpeaker = nil }
+            Button(L10n.cancel, role: .cancel) { editingSpeaker = nil }
         } message: {
-            Text("Enter a name for this speaker.")
+            Text(L10n.enterSpeakerName)
         }
         .sheet(isPresented: Binding(
             get: { editingSegmentIndex != nil },
@@ -1484,7 +1611,7 @@ struct DecodedView: View {
 
     private var notesTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            TrackedLabel("MEETING NOTES", size: 10, kerning: 1.5)
+            TrackedLabel(L10n.meetingNotes, size: 10, kerning: 1.5)
 
             TextEditor(text: Binding(
                 get: { recording.notes ?? "" },
@@ -1498,7 +1625,7 @@ struct DecodedView: View {
             .glassCard(radius: 10)
 
             if recording.notes == nil || recording.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
-                Text("Tap above to add notes about this meeting.")
+                Text(L10n.tapToAddNotes)
                     .font(AppFont.mono(size: 12, weight: .regular))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.leading)
@@ -1507,7 +1634,7 @@ struct DecodedView: View {
             // Image attachments section
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    TrackedLabel("ATTACHMENTS", size: 10, kerning: 1.5)
+                    TrackedLabel(L10n.attachments, size: 10, kerning: 1.5)
                     Spacer()
                     
                     // Add image buttons
@@ -1549,7 +1676,7 @@ struct DecodedView: View {
                         }
                     }
                 } else {
-                    Text("Add photos of whiteboards, documents, or handwritten notes. Tap an image to extract text.")
+                    Text(L10n.addPhotosDescription)
                         .font(AppFont.mono(size: 12, weight: .regular))
                         .foregroundStyle(.gray)
                         .multilineTextAlignment(.leading)
@@ -1562,7 +1689,7 @@ struct DecodedView: View {
                 HStack {
                     ProgressView()
                         .tint(.white)
-                    Text("Processing image...")
+                    Text(L10n.processingImage)
                         .font(AppFont.mono(size: 12))
                         .foregroundStyle(.gray)
                 }
@@ -1654,7 +1781,7 @@ struct DecodedView: View {
         VStack(alignment: .leading, spacing: 24) {
             if !recording.amplitudeSamples.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    TrackedLabel("PLAYBACK", size: 10, kerning: 1.5)
+                    TrackedLabel(L10n.playback, size: 10, kerning: 1.5)
                     PlaybackWaveformView(
                         samples: recording.amplitudeSamples,
                         duration: recording.duration,
@@ -1666,7 +1793,7 @@ struct DecodedView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                TrackedLabel("DETAILS", size: 10, kerning: 1.5)
+                TrackedLabel(L10n.details, size: 10, kerning: 1.5)
                 detailRow("FORMAT", value: "M4A / AAC")
                 detailRow("SAMPLE RATE", value: "16 kHz")
                 detailRow("CHANNELS", value: "Mono")
@@ -1679,9 +1806,9 @@ struct DecodedView: View {
 
             // Audio compression / export
             VStack(alignment: .leading, spacing: 12) {
-                TrackedLabel("EXPORT COMPRESSED", size: 10, kerning: 1.5)
+                TrackedLabel(L10n.exportCompressed, size: 10, kerning: 1.5)
 
-                Text("Re-encode audio at lower bitrate to reduce file size.")
+                Text(L10n.reencodeDescription)
                     .font(AppFont.mono(size: 11))
                     .foregroundStyle(.gray)
                     .lineSpacing(3)
@@ -1691,7 +1818,7 @@ struct DecodedView: View {
                         ProgressView()
                             .scaleEffect(0.7)
                             .tint(.white)
-                        Text("Compressing...")
+                        Text(L10n.compressing)
                             .font(AppFont.mono(size: 11))
                             .foregroundStyle(.gray)
                     }
@@ -1831,17 +1958,136 @@ struct DecodedView: View {
         .glassCard()
     }
 
-    private func transcriptRow(_ segment: SegmentData, index: Int, isActive: Bool) -> some View {
+    // MARK: - Smart Action Helpers
+
+    private func smartActionCard(icon: String, iconColor: Color, title: String, subtitle: String, trailing: String?) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(iconColor)
+                .frame(width: 20, height: 20)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(AppFont.mono(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineSpacing(3)
+                Text(subtitle)
+                    .font(AppFont.mono(size: 11, weight: .regular))
+                    .foregroundStyle(.gray)
+            }
+
+            Spacer()
+
+            if let trailing {
+                Image(systemName: trailing)
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.top, 2)
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, AppLayout.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard()
+    }
+
+    private func openMailto(recipient: String, subject: String, body: String) {
+        let subjectEncoded = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let bodyEncoded = body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "mailto:?subject=\(subjectEncoded)&body=\(bodyEncoded)") {
+            #if canImport(UIKit)
+            UIApplication.shared.open(url)
+            #elseif canImport(AppKit)
+            NSWorkspace.shared.open(url)
+            #endif
+        }
+        showActionToastMessage("Opening Mail...")
+    }
+
+    private func createReminder(index: Int, title: String, dueDate: Date?, recordingTitle: String) {
+        Task {
+            do {
+                try await EventKitService.shared.createReminder(
+                    title: title,
+                    dueDate: dueDate,
+                    notes: "From Trace recording: \(recordingTitle)"
+                )
+                createdReminders.insert(index)
+                showActionToastMessage("Reminder created")
+            } catch {
+                showActionToastMessage("Failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func createCalendarEvent(index: Int, title: String, startDate: Date, duration: TimeInterval, recordingTitle: String) {
+        Task {
+            do {
+                try await EventKitService.shared.createCalendarEvent(
+                    title: title,
+                    startDate: startDate,
+                    duration: duration,
+                    notes: "From Trace recording: \(recordingTitle)"
+                )
+                createdEvents.insert(index)
+                showActionToastMessage("Event added to calendar")
+            } catch {
+                showActionToastMessage("Failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func showActionToastMessage(_ text: String) {
+        actionToastText = text
+        withAnimation(.easeInOut(duration: 0.25)) {
+            showActionToast = true
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showActionToast = false
+            }
+        }
+    }
+
+    private func transcriptRow(_ segment: SegmentData, index: Int, isActive: Bool, isHighlighted: Bool = false) -> some View {
+        let bgColor: Color = isHighlighted ? Color.yellow.opacity(0.15) : (isActive ? Color.white.opacity(0.15) : Color.clear)
+        let borderColor: Color = isHighlighted ? Color.yellow.opacity(0.4) : (isActive ? Color.white.opacity(0.3) : Color.clear)
+        let textColor: Color = isActive ? .white : .gray
+
+        return transcriptRowContent(segment, index: index, isActive: isActive, textColor: textColor)
+            .padding(.vertical, 10)
+            .padding(.horizontal, AppLayout.cardPadding)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if sharedPlayer.duration > 0 {
+                    let fraction = CGFloat(segment.timestamp / sharedPlayer.duration)
+                    sharedPlayer.seek(to: fraction)
+                    if !sharedPlayer.isPlaying {
+                        sharedPlayer.play()
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(bgColor))
+            .glassCard(radius: 10)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(borderColor, lineWidth: 1))
+            .animation(.easeOut(duration: 0.5), value: isHighlighted)
+    }
+
+    @ViewBuilder
+    private func transcriptRowContent(_ segment: SegmentData, index: Int, isActive: Bool, textColor: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                // Playing indicator
                 if isActive {
                     Image(systemName: "waveform")
                         .font(.system(size: 10))
                         .foregroundStyle(.white)
                         .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isActive)
                 }
-                
+
                 if !segment.speaker.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text(recording.displayName(for: segment.speaker))
                         .font(AppFont.mono(size: 11, weight: .bold))
@@ -1854,7 +2100,6 @@ struct DecodedView: View {
 
                 Spacer()
 
-                // Edit button
                 Button {
                     editingSegmentIndex = index
                     editingSegmentText = segment.text
@@ -1867,32 +2112,9 @@ struct DecodedView: View {
 
             Text(segment.text)
                 .font(AppFont.mono(size: 14, weight: .regular))
-                .foregroundStyle(isActive ? .white : .gray)
+                .foregroundStyle(textColor)
                 .lineSpacing(4)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, AppLayout.cardPadding)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // Tap to seek to this segment
-            if recording.duration > 0 {
-                let fraction = CGFloat(segment.timestamp / recording.duration)
-                sharedPlayer.seek(to: fraction)
-                if !sharedPlayer.isPlaying {
-                    sharedPlayer.play()
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isActive ? Color.white.opacity(0.15) : Color.clear)
-        )
-        .glassCard(radius: 10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isActive ? Color.white.opacity(0.3) : Color.clear, lineWidth: 1)
-        )
     }
 
     private func callToAction(icon: String, title: String, subtitle: String, action: (String, () -> Void)?) -> some View {
@@ -1968,6 +2190,9 @@ struct DecodedView: View {
         recording.summaryContext = nil
         recording.summaryActions = nil
         recording.summarySources = nil
+        recording.summaryEmails = nil
+        recording.summaryReminders = nil
+        recording.summaryCalendarEvents = nil
         recording.wasSummarizedOnDevice = nil
         recording.summarizationError = nil
         recording.speakerNames = nil
@@ -2093,6 +2318,9 @@ struct DecodedView: View {
                 recording.summaryContext = result.context
                 recording.summaryActions = result.actions
                 recording.summarySources = result.sources
+                recording.summaryEmails = result.emails
+                recording.summaryReminders = result.reminders
+                recording.summaryCalendarEvents = result.calendarEvents
                 recording.wasSummarizedOnDevice = result.wasOnDevice
                 recording.isSummarizing = false
             } catch {
@@ -2103,8 +2331,36 @@ struct DecodedView: View {
         }
     }
 
+    /// Format transcript with speaker names and timestamps for sharing/copying
+    private func formattedTranscriptText() -> String? {
+        // If we have segments with speaker info, build a formatted version
+        if let segments = recording.transcriptSegments, !segments.isEmpty {
+            let speakerNames = recording.speakerNames ?? [:]
+            var result = ""
+            var previousSpeaker: String? = nil
+
+            for segment in segments {
+                let speaker = speakerNames[segment.speaker] ?? segment.speaker
+                let timestamp = segment.timestamp.formatted
+
+                // Add speaker header when speaker changes or at the start
+                if speaker != previousSpeaker && !speaker.trimmingCharacters(in: .whitespaces).isEmpty {
+                    if !result.isEmpty { result += "\n" }
+                    result += "[\(timestamp)] \(speaker):\n"
+                }
+
+                result += "\(segment.text)\n"
+                previousSpeaker = speaker
+            }
+            return result.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Fallback to plain text
+        return recording.transcriptFullText
+    }
+
     private func copyTranscript() {
-        guard let text = recording.transcriptFullText else { return }
+        guard let text = formattedTranscriptText() else { return }
         UIPasteboard.general.string = text
         withAnimation(.easeInOut(duration: 0.25)) {
             showCopiedToast = true
@@ -2154,15 +2410,15 @@ struct DecodedView: View {
         }
     }
     
-    private func shareSignalPackage() {
-        if let packageURL = SignalPackageExporter.shared.createSignalPackage(recording: recording) {
+    private func shareTracePackage() {
+        if let packageURL = TracePackageExporter.shared.createTracePackage(recording: recording) {
             shareItems = [packageURL]
             showShareSheet = true
             
             // Clean up after sharing completes (delayed)
             Task {
                 try? await Task.sleep(for: .seconds(60))
-                SignalPackageExporter.shared.cleanupPackage(at: packageURL)
+                TracePackageExporter.shared.cleanupPackage(at: packageURL)
             }
         }
     }
@@ -2476,14 +2732,14 @@ struct ImageOCRSheet: View {
                     HStack {
                         ProgressView()
                             .tint(.white)
-                        Text("Extracting text...")
+                        Text(L10n.extractingText)
                             .font(AppFont.mono(size: 14))
                             .foregroundStyle(.gray)
                     }
                     .padding()
                 } else if let text = extractedText {
                     VStack(alignment: .leading, spacing: 12) {
-                        TrackedLabel("EXTRACTED TEXT", size: 10, kerning: 1.5)
+                        TrackedLabel(L10n.extractedText, size: 10, kerning: 1.5)
 
                         ScrollView {
                             Text(text.isEmpty ? "No text found in image." : text)
@@ -2499,7 +2755,7 @@ struct ImageOCRSheet: View {
                             Button {
                                 onExtractText(text)
                             } label: {
-                                Text("ADD TO NOTES")
+                                Text(L10n.addToNotes)
                                     .font(AppFont.mono(size: 12, weight: .bold))
                                     .kerning(1.5)
                                     .foregroundStyle(.black)
@@ -2520,7 +2776,7 @@ struct ImageOCRSheet: View {
                             .foregroundStyle(.gray)
                             .multilineTextAlignment(.center)
 
-                        Button("Retry") {
+                        Button(L10n.retry) {
                             extractText()
                         }
                         .font(AppFont.mono(size: 12, weight: .bold))
@@ -2535,7 +2791,7 @@ struct ImageOCRSheet: View {
                     } label: {
                         HStack {
                             Image(systemName: "text.viewfinder")
-                            Text("EXTRACT TEXT")
+                            Text(L10n.extractText)
                         }
                         .font(AppFont.mono(size: 12, weight: .bold))
                         .kerning(1.5)
@@ -2555,13 +2811,13 @@ struct ImageOCRSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("IMAGE")
+                    Text(L10n.image)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
                         .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
+                    Button(L10n.done) {
                         dismiss()
                     }
                     .font(AppFont.mono(size: 14, weight: .medium))
@@ -2626,7 +2882,7 @@ struct TranscriptSegmentEditor: View {
                 
                 // Text editor
                 VStack(alignment: .leading, spacing: 8) {
-                    TrackedLabel("TRANSCRIPT TEXT", size: 10, kerning: 1.5)
+                    TrackedLabel(L10n.transcriptText, size: 10, kerning: 1.5)
                         .padding(.horizontal)
                     
                     TextEditor(text: $text)
@@ -2647,7 +2903,7 @@ struct TranscriptSegmentEditor: View {
                     onSave()
                     dismiss()
                 } label: {
-                    Text("SAVE CHANGES")
+                    Text(L10n.saveChanges)
                         .font(AppFont.mono(size: 12, weight: .bold))
                         .kerning(1.5)
                         .foregroundStyle(.black)
@@ -2665,13 +2921,13 @@ struct TranscriptSegmentEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("EDIT SEGMENT")
+                    Text(L10n.editSegment)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
                         .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(L10n.cancel) {
                         onCancel()
                         dismiss()
                     }
@@ -2707,11 +2963,11 @@ struct TranscriptionMethodChooser: View {
                         .font(.system(size: 40, weight: .thin))
                         .foregroundStyle(.white)
                     
-                    Text("Choose Transcription Method")
+                    Text(L10n.chooseTranscriptionMethod)
                         .font(AppFont.mono(size: 16, weight: .bold))
                         .foregroundStyle(.white)
                     
-                    Text("Select how you'd like to transcribe this recording")
+                    Text(L10n.selectTranscriptionMethod)
                         .font(AppFont.mono(size: 12))
                         .foregroundStyle(.gray)
                         .multilineTextAlignment(.center)
@@ -2733,12 +2989,12 @@ struct TranscriptionMethodChooser: View {
                                         .foregroundStyle(.white)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("APPLE ON-DEVICE")
+                                        Text(L10n.appleOnDevice)
                                             .font(AppFont.mono(size: 13, weight: .bold))
                                             .kerning(1.0)
                                             .foregroundStyle(.white)
                                         
-                                        Text("Private & Unlimited")
+                                        Text(L10n.privateAndUnlimited)
                                             .font(AppFont.mono(size: 11))
                                             .foregroundStyle(.gray)
                                     }
@@ -2746,11 +3002,11 @@ struct TranscriptionMethodChooser: View {
                                     Spacer()
                                     
                                     VStack(alignment: .trailing, spacing: 2) {
-                                        Text("INCLUDED")
+                                        Text(L10n.included)
                                             .font(AppFont.mono(size: 11, weight: .bold))
                                             .foregroundStyle(.green)
                                         
-                                        Text("Unlimited")
+                                        Text(L10n.unlimited)
                                             .font(AppFont.mono(size: 10))
                                             .foregroundStyle(.gray)
                                     }
@@ -2784,12 +3040,12 @@ struct TranscriptionMethodChooser: View {
                                     .foregroundStyle(.white)
                                 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("ELEVENLABS API")
+                                    Text(L10n.elevenlabsAPI)
                                         .font(AppFont.mono(size: 13, weight: .bold))
                                         .kerning(1.0)
                                         .foregroundStyle(.white)
                                     
-                                    Text("Higher Accuracy")
+                                    Text(L10n.higherAccuracy)
                                         .font(AppFont.mono(size: 11))
                                         .foregroundStyle(.gray)
                                 }
@@ -2834,7 +3090,7 @@ struct TranscriptionMethodChooser: View {
                     .opacity(subscription.canTranscribe(duration: recordingDuration) ? 1 : 0.5)
                     
                     if !subscription.canTranscribe(duration: recordingDuration) {
-                        Text("Not enough API usage remaining for this recording")
+                        Text(L10n.notEnoughUsage)
                             .font(AppFont.mono(size: 10))
                             .foregroundStyle(.orange)
                     }
@@ -2844,11 +3100,11 @@ struct TranscriptionMethodChooser: View {
                 // Usage info
                 VStack(spacing: 8) {
                     HStack {
-                        Text("Monthly API Usage")
+                        Text(L10n.monthlyAPIUsage)
                             .font(AppFont.mono(size: 11))
                             .foregroundStyle(.gray)
                         Spacer()
-                        Text("\(subscription.currentTier.displayName) Plan")
+                        Text("\(subscription.currentTier.displayName) \(L10n.plan)")
                             .font(AppFont.mono(size: 11, weight: .medium))
                             .foregroundStyle(.white)
                     }
@@ -2886,13 +3142,13 @@ struct TranscriptionMethodChooser: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("TRANSCRIBE")
+                    Text(L10n.transcribe.uppercased())
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
                         .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(L10n.cancel) {
                         dismiss()
                     }
                     .font(AppFont.mono(size: 14, weight: .medium))

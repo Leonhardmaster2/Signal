@@ -26,6 +26,11 @@ final class Recording {
     var summaryActions: [ActionData]?
     var summarySources: [SourceData]?
 
+    // Smart actions from summarization
+    var summaryEmails: [EmailActionData]?
+    var summaryReminders: [ReminderActionData]?
+    var summaryCalendarEvents: [CalendarEventData]?
+
     // Meeting notes
     var notes: String?
 
@@ -109,7 +114,10 @@ final class Recording {
             oneLiner: oneLiner,
             actionVectors: (summaryActions ?? []).map { ActionVector(assignee: $0.assignee, task: $0.task, isCompleted: $0.isCompleted, timestamp: $0.timestamp) },
             context: context,
-            sources: (summarySources ?? []).map { Source(timestamp: $0.timestamp, description: $0.description) }
+            sources: (summarySources ?? []).map { Source(timestamp: $0.timestamp, description: $0.description) },
+            emails: (summaryEmails ?? []).map { EmailAction(recipient: $0.recipient, subject: $0.subject, body: $0.body, timestamp: $0.timestamp) },
+            reminders: (summaryReminders ?? []).map { ReminderAction(title: $0.title, dueDescription: $0.dueDescription, dueDate: $0.dueDate, timestamp: $0.timestamp) },
+            calendarEvents: (summaryCalendarEvents ?? []).map { CalendarEventAction(title: $0.title, dateDescription: $0.dateDescription, eventDate: $0.eventDate, duration: $0.duration, timestamp: $0.timestamp) }
         )
     }
 
@@ -209,6 +217,28 @@ struct SourceData: Codable {
     let description: String
 }
 
+struct EmailActionData: Codable {
+    let recipient: String
+    let subject: String
+    let body: String
+    let timestamp: TimeInterval?
+}
+
+struct ReminderActionData: Codable {
+    let title: String
+    let dueDescription: String
+    let dueDate: Date?
+    let timestamp: TimeInterval?
+}
+
+struct CalendarEventData: Codable {
+    let title: String
+    let dateDescription: String
+    let eventDate: Date?
+    let duration: TimeInterval?
+    let timestamp: TimeInterval?
+}
+
 // MARK: - View-layer types (not persisted)
 
 struct Transcript {
@@ -228,6 +258,9 @@ struct Summary {
     let actionVectors: [ActionVector]
     let context: String
     let sources: [Source]
+    let emails: [EmailAction]
+    let reminders: [ReminderAction]
+    let calendarEvents: [CalendarEventAction]
 }
 
 struct ActionVector: Identifiable {
@@ -249,4 +282,29 @@ struct Source: Identifiable {
     let id = UUID()
     let timestamp: TimeInterval
     let description: String
+}
+
+struct EmailAction: Identifiable {
+    let id = UUID()
+    let recipient: String
+    let subject: String
+    let body: String
+    let timestamp: TimeInterval?
+}
+
+struct ReminderAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let dueDescription: String
+    let dueDate: Date?
+    let timestamp: TimeInterval?
+}
+
+struct CalendarEventAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let dateDescription: String
+    let eventDate: Date?
+    let duration: TimeInterval?
+    let timestamp: TimeInterval?
 }

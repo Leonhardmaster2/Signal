@@ -61,27 +61,27 @@ struct RecorderView: View {
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .alert("Recording Error", isPresented: $permissionDenied) {
+        .alert(L10n.error, isPresented: $permissionDenied) {
             if errorMessage.contains("not authorized") || errorMessage.contains("permission") {
-                Button("Settings") {
+                Button(L10n.settings) {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
                     }
                 }
-                Button("Cancel", role: .cancel) { dismiss() }
+                Button(L10n.cancel, role: .cancel) { dismiss() }
             } else {
-                Button("OK", role: .cancel) { dismiss() }
+                Button(L10n.ok, role: .cancel) { dismiss() }
             }
         } message: {
-            Text(errorMessage.isEmpty ? "Signal needs microphone access to record. Enable it in Settings." : errorMessage)
+            Text(errorMessage.isEmpty ? L10n.microphoneAccess : errorMessage)
         }
-        .alert("Discard Recording?", isPresented: $showDiscardAlert) {
-            Button("Discard", role: .destructive) {
+        .alert(L10n.discardRecording, isPresented: $showDiscardAlert) {
+            Button(L10n.discard, role: .destructive) {
                 discardAndDismiss()
             }
-            Button("Keep Recording", role: .cancel) { }
+            Button(L10n.keepRecording, role: .cancel) { }
         } message: {
-            Text("This recording will be permanently deleted.")
+            Text(L10n.discardMessage)
         }
         .sheet(isPresented: $showOverview, onDismiss: { dismiss() }) {
             if let recording = savedRecording {
@@ -141,7 +141,7 @@ struct RecorderView: View {
                         .frame(width: 6, height: 6)
                         .opacity(recorder.isPaused ? 0.25 : 1.0)
 
-                    Text(recorder.isPaused ? "PAUSED" : "RECORDING")
+                    Text(recorder.isPaused ? L10n.paused : L10n.recording)
                         .font(AppFont.mono(size: 11, weight: .semibold))
                         .kerning(1.5)
                         .foregroundStyle(.white)
@@ -167,7 +167,7 @@ struct RecorderView: View {
                 .contentTransition(.numericText())
 
             if !recorder.marks.isEmpty {
-                Text("\(recorder.marks.count) MARK\(recorder.marks.count == 1 ? "" : "S")")
+                Text("\(recorder.marks.count) \(L10n.marks.uppercased())")
                     .font(AppFont.mono(size: 11, weight: .medium))
                     .kerning(1.5)
                     .foregroundStyle(.gray)
@@ -209,14 +209,14 @@ struct RecorderView: View {
                     recorder.addMark()
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
-                    glassControl(icon: "flag.fill", label: "MARK")
+                    glassControl(icon: "flag.fill", label: L10n.mark)
                 }
 
                 // NOTES button
                 Button {
                     showNotesEditor = true
                 } label: {
-                    glassControl(icon: "note.text", label: "NOTES")
+                    glassControl(icon: "note.text", label: L10n.notes)
                 }
 
                 // PAUSE / RESUME button
@@ -230,7 +230,7 @@ struct RecorderView: View {
                 } label: {
                     glassControl(
                         icon: recorder.isPaused ? "play.fill" : "pause.fill",
-                        label: recorder.isPaused ? "RESUME" : "PAUSE"
+                        label: recorder.isPaused ? L10n.resume : L10n.pause
                     )
                 }
 
@@ -249,7 +249,7 @@ struct RecorderView: View {
                                 .frame(width: 18, height: 18)
                         }
 
-                        Text("CUT")
+                        Text(L10n.cut)
                             .font(AppFont.mono(size: 9, weight: .medium))
                             .kerning(1.2)
                             .foregroundStyle(.gray)
@@ -272,7 +272,7 @@ struct RecorderView: View {
                                 .frame(width: 60, height: 60)
                         }
 
-                        Text("RECORD")
+                        Text(L10n.record)
                             .font(AppFont.mono(size: 9, weight: .medium))
                             .kerning(1.2)
                             .foregroundStyle(.gray)
@@ -358,6 +358,13 @@ struct RecorderView: View {
         modelContext.insert(recording)
         recorder.reset()
 
+        // Auto-backup to iCloud if signed in
+        if AppleSignInService.shared.isSignedIn {
+            Task {
+                try? await iCloudSyncService.shared.backupRecording(recording)
+            }
+        }
+
         savedRecording = recording
         showOverview = true
     }
@@ -405,13 +412,13 @@ struct MeetingNotesSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("MEETING NOTES")
+                    Text(L10n.notes)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
                         .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(L10n.done) { dismiss() }
                         .font(AppFont.mono(size: 14, weight: .bold))
                         .foregroundStyle(.white)
                 }

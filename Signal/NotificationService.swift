@@ -2,7 +2,7 @@ import Foundation
 import UserNotifications
 import UIKit
 
-/// Service for handling local notifications in the Signal app
+/// Service for handling local notifications in the Trace app
 final class NotificationService {
     static let shared = NotificationService()
     

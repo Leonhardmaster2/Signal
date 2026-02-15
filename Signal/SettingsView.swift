@@ -21,13 +21,20 @@ struct SettingsView: View {
     @State private var onDeviceSummarizationAvailable = false
     @State private var showLanguagePicker = false
 
+    // iCloud Backup
+    @State private var appleSignIn = AppleSignInService.shared
+    @State private var iCloudSync = iCloudSyncService.shared
+    @State private var showRestoreConfirmation = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: AppLayout.sectionSpacing) {
                 subscriptionSection
+                iCloudSection
                 recordingSection
                 onDeviceIntelligenceSection
                 generalSection
+                appLanguageSection
                 storageSection
                 aboutSection
                 #if DEBUG
@@ -41,7 +48,7 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("SETTINGS")
+                Text(L10n.settings)
                     .font(AppFont.mono(size: 13, weight: .semibold))
                     .kerning(2.0)
                     .foregroundStyle(.white)
@@ -53,20 +60,187 @@ struct SettingsView: View {
     
     private var subscriptionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TrackedLabel("SUBSCRIPTION")
+            TrackedLabel(L10n.subscription)
             SubscriptionOverviewView()
         }
+    }
+
+    // MARK: - iCloud Backup
+
+    private var iCloudSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TrackedLabel(L10n.icloudBackup)
+
+            VStack(spacing: 0) {
+                if appleSignIn.isSignedIn {
+                    // Signed-in state: account info
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.signedInAs(appleSignIn.displayName))
+                                .font(AppFont.mono(size: 13, weight: .medium))
+                                .foregroundStyle(.white)
+                        }
+                        Spacer()
+                        Button {
+                            appleSignIn.signOut()
+                        } label: {
+                            Text(L10n.signOut)
+                                .font(AppFont.mono(size: 11, weight: .medium))
+                                .foregroundStyle(.red)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.red.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .padding(AppLayout.cardPadding)
+
+                    Color.divider.frame(height: 0.5)
+
+                    // Last backup date
+                    HStack {
+                        Text(L10n.lastBackup)
+                            .font(AppFont.mono(size: 13, weight: .medium))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Text(lastBackupText)
+                            .font(AppFont.mono(size: 13))
+                            .foregroundStyle(Color.muted)
+                    }
+                    .padding(AppLayout.cardPadding)
+
+                    Color.divider.frame(height: 0.5)
+
+                    // Backup Now button
+                    Button {
+                        Task {
+                            try? await iCloudSync.backupAllRecordings(modelContext: modelContext)
+                        }
+                    } label: {
+                        HStack {
+                            if iCloudSync.isSyncing {
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.8)
+                                Text(L10n.backingUp)
+                                    .font(AppFont.mono(size: 13, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Text("\(Int(iCloudSync.syncProgress * 100))%")
+                                    .font(AppFont.mono(size: 11))
+                                    .foregroundStyle(Color.muted)
+                            } else {
+                                Image(systemName: "icloud.and.arrow.up")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.white)
+                                Text(L10n.backupNow)
+                                    .font(AppFont.mono(size: 13, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.muted)
+                            }
+                        }
+                        .padding(AppLayout.cardPadding)
+                    }
+                    .disabled(iCloudSync.isSyncing || iCloudSync.isRestoring)
+
+                    Color.divider.frame(height: 0.5)
+
+                    // Restore from iCloud button
+                    Button {
+                        showRestoreConfirmation = true
+                    } label: {
+                        HStack {
+                            if iCloudSync.isRestoring {
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.8)
+                                Text(L10n.restoring)
+                                    .font(AppFont.mono(size: 13, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Text("\(Int(iCloudSync.syncProgress * 100))%")
+                                    .font(AppFont.mono(size: 11))
+                                    .foregroundStyle(Color.muted)
+                            } else {
+                                Image(systemName: "icloud.and.arrow.down")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.white)
+                                Text(L10n.restoreFromiCloud)
+                                    .font(AppFont.mono(size: 13, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.muted)
+                            }
+                        }
+                        .padding(AppLayout.cardPadding)
+                    }
+                    .disabled(iCloudSync.isSyncing || iCloudSync.isRestoring)
+                } else {
+                    // Not signed in: description + sign in button
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(L10n.signInToBackup)
+                            .font(AppFont.mono(size: 12))
+                            .foregroundStyle(Color.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Button {
+                            Task {
+                                try? await appleSignIn.signIn()
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "apple.logo")
+                                    .font(.system(size: 16))
+                                Text(L10n.signInWithApple)
+                                    .font(AppFont.mono(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                    .padding(AppLayout.cardPadding)
+                }
+            }
+            .glassCard()
+        }
+        .alert(L10n.restoreFromiCloud, isPresented: $showRestoreConfirmation) {
+            Button(L10n.cancel, role: .cancel) {}
+            Button(L10n.restore, role: .none) {
+                Task {
+                    try? await iCloudSync.restoreFromiCloud(modelContext: modelContext)
+                }
+            }
+        } message: {
+            Text(L10n.restoreWarning)
+        }
+    }
+
+    private var lastBackupText: String {
+        if let date = iCloudSync.lastSyncDate {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .abbreviated
+            return formatter.localizedString(for: date, relativeTo: Date())
+        }
+        return L10n.never
     }
 
     // MARK: - Recording
 
     private var recordingSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TrackedLabel("RECORDING")
+            TrackedLabel(L10n.recordingSection)
 
             VStack(spacing: 0) {
                 HStack {
-                    Text("Auto-transcribe")
+                    Text(L10n.autoTranscribe)
                         .font(AppFont.mono(size: 13, weight: .medium))
                         .foregroundStyle(.white)
                     Spacer()
@@ -79,14 +253,14 @@ struct SettingsView: View {
                 Color.divider.frame(height: 0.5)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Quality")
+                    Text(L10n.quality)
                         .font(AppFont.mono(size: 13, weight: .medium))
                         .foregroundStyle(.white)
 
-                    Picker("Quality", selection: $recordingQuality) {
-                        Text("Standard (16 kHz)")
+                    Picker(L10n.quality, selection: $recordingQuality) {
+                        Text(L10n.standardQuality)
                             .tag("standard")
-                        Text("High (44.1 kHz)")
+                        Text(L10n.highQuality)
                             .tag("high")
                     }
                     .pickerStyle(.segmented)
@@ -111,10 +285,10 @@ struct SettingsView: View {
         if anyOnDeviceFeaturesAvailable {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 6) {
-                    TrackedLabel("ON-DEVICE INTELLIGENCE")
+                    TrackedLabel(L10n.onDeviceIntelligence)
                     
                     // Demo badge
-                    Text("DEMO")
+                    Text(L10n.demoBadge)
                         .font(AppFont.mono(size: 9, weight: .bold))
                         .foregroundStyle(.black)
                         .padding(.horizontal, 6)
@@ -129,10 +303,10 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Apple Transcription")
+                                    Text(L10n.appleTranscription)
                                         .font(AppFont.mono(size: 13, weight: .medium))
                                         .foregroundStyle(.white)
-                                    Text("Uses on-device speech recognition")
+                                    Text(L10n.usesOnDeviceSpeech)
                                         .font(AppFont.mono(size: 10))
                                         .foregroundStyle(Color.muted)
                                 }
@@ -155,14 +329,14 @@ struct SettingsView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 4) {
-                                        Text("Apple Intelligence")
+                                        Text(L10n.appleIntelligence)
                                             .font(AppFont.mono(size: 13, weight: .medium))
                                             .foregroundStyle(.white)
                                         Image(systemName: "apple.intelligence")
                                             .font(.system(size: 12))
                                             .foregroundStyle(.white.opacity(0.7))
                                     }
-                                    Text("Summarize using on-device AI")
+                                    Text(L10n.summarizeOnDevice)
                                         .font(AppFont.mono(size: 10))
                                         .foregroundStyle(Color.muted)
                                 }
@@ -182,10 +356,10 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Auto-detect Language")
+                                    Text(L10n.autoDetectLanguage)
                                         .font(AppFont.mono(size: 13, weight: .medium))
                                         .foregroundStyle(.white)
-                                    Text("Automatically detects spoken language")
+                                    Text(L10n.autoDetectsSpoken)
                                         .font(AppFont.mono(size: 10))
                                         .foregroundStyle(Color.muted)
                                 }
@@ -205,10 +379,10 @@ struct SettingsView: View {
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(useAutoLanguageDetection ? "Fallback Language" : "Transcription Language")
+                                    Text(useAutoLanguageDetection ? L10n.fallbackLanguage : L10n.transcriptionLanguage)
                                         .font(AppFont.mono(size: 13, weight: .medium))
                                         .foregroundStyle(.white)
-                                    Text(useAutoLanguageDetection ? "Used if detection fails" : "Language for transcription")
+                                    Text(useAutoLanguageDetection ? L10n.usedIfDetectionFails : L10n.languageForTranscription)
                                         .font(AppFont.mono(size: 10))
                                         .foregroundStyle(Color.muted)
                                 }
@@ -231,7 +405,7 @@ struct SettingsView: View {
                         Image(systemName: "lock.shield.fill")
                             .font(.system(size: 14))
                             .foregroundStyle(.green)
-                        Text("On-device processing keeps your data private")
+                        Text(L10n.onDevicePrivacy)
                             .font(AppFont.mono(size: 10))
                             .foregroundStyle(Color.muted)
                     }
@@ -264,11 +438,11 @@ struct SettingsView: View {
 
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TrackedLabel("GENERAL")
+            TrackedLabel(L10n.general)
 
             VStack(spacing: 0) {
                 HStack {
-                    Text("Haptic Feedback")
+                    Text(L10n.hapticFeedback)
                         .font(AppFont.mono(size: 13, weight: .medium))
                         .foregroundStyle(.white)
                     Spacer()
@@ -282,15 +456,78 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - App Language
+
+    @State private var locManager = LocalizationManager.shared
+
+    private var appLanguageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TrackedLabel(L10n.language)
+
+            VStack(spacing: 0) {
+                // Current language row
+                HStack {
+                    Text(L10n.appLanguage)
+                        .font(AppFont.mono(size: 13, weight: .medium))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Text(locManager.currentLanguage.flag)
+                            .font(.system(size: 16))
+                        Text(locManager.currentLanguage.nativeName)
+                            .font(AppFont.mono(size: 13))
+                            .foregroundStyle(Color.muted)
+                    }
+                }
+                .padding(AppLayout.cardPadding)
+
+                Color.divider.frame(height: 0.5)
+
+                // Language grid
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 0) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                locManager.currentLanguage = lang
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(lang.flag)
+                                    .font(.system(size: 16))
+
+                                Text(lang.nativeName)
+                                    .font(AppFont.mono(size: 11, weight: locManager.currentLanguage == lang ? .bold : .regular))
+                                    .foregroundStyle(locManager.currentLanguage == lang ? .white : .gray)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                if locManager.currentLanguage == lang {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(locManager.currentLanguage == lang ? Color.white.opacity(0.08) : Color.clear)
+                        }
+                    }
+                }
+            }
+            .glassCard()
+        }
+    }
+
     // MARK: - Storage
 
     private var storageSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TrackedLabel("STORAGE")
+            TrackedLabel(L10n.storage)
 
             VStack(spacing: 0) {
                 HStack {
-                    Text("Recordings")
+                    Text(L10n.recordings)
                         .font(AppFont.mono(size: 13, weight: .medium))
                         .foregroundStyle(.white)
                     Spacer()
@@ -303,7 +540,7 @@ struct SettingsView: View {
                 Color.divider.frame(height: 0.5)
 
                 HStack {
-                    Text("Disk Usage")
+                    Text(L10n.diskUsage)
                         .font(AppFont.mono(size: 13, weight: .medium))
                         .foregroundStyle(.white)
                     Spacer()
@@ -319,7 +556,7 @@ struct SettingsView: View {
                     showDeleteConfirmation = true
                 } label: {
                     HStack {
-                        Text("Delete All Recordings")
+                        Text(L10n.deleteAllRecordings)
                             .font(AppFont.mono(size: 13, weight: .medium))
                             .foregroundStyle(.red)
                         Spacer()
@@ -332,13 +569,13 @@ struct SettingsView: View {
             }
             .glassCard()
         }
-        .alert("Delete All Recordings?", isPresented: $showDeleteConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete All", role: .destructive) {
+        .alert(L10n.deleteAllRecordings + "?", isPresented: $showDeleteConfirmation) {
+            Button(L10n.cancel, role: .cancel) {}
+            Button(L10n.deleteAll, role: .destructive) {
                 deleteAllRecordings()
             }
         } message: {
-            Text("This will permanently remove all recordings and their audio files. This action cannot be undone.")
+            Text(L10n.deleteAllMessage)
         }
     }
 
@@ -346,11 +583,11 @@ struct SettingsView: View {
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TrackedLabel("ABOUT")
+            TrackedLabel(L10n.about)
 
             VStack(spacing: 0) {
                 HStack {
-                    Text("Version")
+                    Text(L10n.version)
                         .font(AppFont.mono(size: 13, weight: .medium))
                         .foregroundStyle(.white)
                     Spacer()
@@ -364,7 +601,7 @@ struct SettingsView: View {
 
                 HStack {
                     Spacer()
-                    Text("Built by Proceduralabs")
+                    Text(L10n.builtBy)
                         .font(AppFont.mono(size: 11, weight: .medium))
                         .foregroundStyle(Color.muted)
                     Spacer()
@@ -728,7 +965,7 @@ struct LanguagePickerView: View {
                     VStack(spacing: 12) {
                         ProgressView()
                             .tint(.white)
-                        Text("Loading languages...")
+                        Text(L10n.loadingLanguages)
                             .font(AppFont.mono(size: 12))
                             .foregroundStyle(.gray)
                     }
@@ -751,12 +988,12 @@ struct LanguagePickerView: View {
                                             if language.supportsOnDevice {
                                                 Image(systemName: "iphone")
                                                     .font(.system(size: 10))
-                                                Text("On-device")
+                                                Text(L10n.onDevice)
                                                     .font(AppFont.mono(size: 10))
                                             } else {
                                                 Image(systemName: "cloud")
                                                     .font(.system(size: 10))
-                                                Text("Requires network")
+                                                Text(L10n.requiresNetwork)
                                                     .font(AppFont.mono(size: 10))
                                             }
                                         }
@@ -788,13 +1025,13 @@ struct LanguagePickerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text("LANGUAGE")
+                    Text(L10n.language)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
                         .foregroundStyle(.white)
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(L10n.cancel) { dismiss() }
                         .font(AppFont.mono(size: 14, weight: .medium))
                         .foregroundStyle(.white)
                 }

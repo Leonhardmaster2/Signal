@@ -5,7 +5,7 @@ import SwiftUI
 
 struct StartRecordingIntent: AppIntent {
     static var title: LocalizedStringResource = "Start Recording"
-    static var description: IntentDescription = "Start a new recording in Signal"
+    static var description: IntentDescription = "Start a new recording in Trace"
 
     static var openAppWhenRun: Bool = true
 
@@ -34,7 +34,7 @@ struct StartRecordingIntent: AppIntent {
 
 struct ViewLatestRecordingIntent: AppIntent {
     static var title: LocalizedStringResource = "View Latest Recording"
-    static var description: IntentDescription = "Open your most recent recording in Signal"
+    static var description: IntentDescription = "Open your most recent recording in Trace"
     
     static var openAppWhenRun: Bool = true
     
@@ -59,7 +59,7 @@ struct ViewLatestRecordingIntent: AppIntent {
 
 struct ViewAllRecordingsIntent: AppIntent {
     static var title: LocalizedStringResource = "View All Recordings"
-    static var description: IntentDescription = "Open Signal to view all your recordings"
+    static var description: IntentDescription = "Open Trace to view all your recordings"
     
     static var openAppWhenRun: Bool = true
     
@@ -71,7 +71,7 @@ struct ViewAllRecordingsIntent: AppIntent {
 
 // MARK: - App Shortcuts Provider
 
-struct SignalShortcutsProvider: AppShortcutsProvider {
+struct TraceShortcutsProvider: AppShortcutsProvider {
     @AppShortcutsBuilder
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

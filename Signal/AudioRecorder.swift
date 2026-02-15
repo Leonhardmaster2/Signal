@@ -30,7 +30,7 @@ final class AudioRecorder: NSObject {
     var currentAudioSource: AudioSource = .external
 
     private var recorder: AVAudioRecorder?
-    private var meteringTimer: DispatchSourceTimer?
+    private var meteringTimer: Timer?
     private(set) var fileURL: URL?
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
@@ -45,6 +45,9 @@ final class AudioRecorder: NSObject {
     // Live Activity
     private var liveActivity: Activity<RecordingActivityAttributes>?
     private var recordingStartDate: Date = .now
+    private var liveActivityUpdateCount: Int = 0
+    private var lastLiveActivityUpdate: Date = .distantPast
+    private var pendingLiveActivityUpdate: Task<Void, Never>?
 
     // Audio session handling
     private var interruptionObserver: NSObjectProtocol?
@@ -103,7 +106,7 @@ final class AudioRecorder: NSObject {
 
         beginBackgroundTask()
 
-        let filename = "signal_\(Int(Date().timeIntervalSince1970)).m4a"
+        let filename = "trace_\(Int(Date().timeIntervalSince1970)).m4a"
         let url = recordingsDirectory.appendingPathComponent(filename)
         fileURL = url
 
@@ -280,19 +283,17 @@ final class AudioRecorder: NSObject {
     private func startMeteringTimer() {
         stopMeteringTimer()
         
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        // Use slower rate in background to save CPU
-        let interval = isInForeground ? (1.0 / 10.0) : 1.0 // 10Hz foreground, 1Hz background
-        timer.schedule(deadline: .now(), repeating: interval)
-        timer.setEventHandler { [weak self] in
+        // Use main thread Timer for reliability in background audio mode
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.processMeteringTick()
         }
-        timer.resume()
+        // Ensure timer continues in background
+        RunLoop.main.add(timer, forMode: .common)
         meteringTimer = timer
     }
 
     private func stopMeteringTimer() {
-        meteringTimer?.cancel()
+        meteringTimer?.invalidate()
         meteringTimer = nil
     }
 
@@ -307,8 +308,8 @@ final class AudioRecorder: NSObject {
         // Always update current time, even when paused
         let time = rec.currentTime
         
-        // Only do metering work if recording (not paused) and in foreground
-        let shouldMeter = rec.isRecording && isInForeground
+        // Do metering work if recording (not paused) - works in both foreground and background
+        let shouldMeter = rec.isRecording
         
         var power: Float = 0
         var linear: Float = 0
@@ -332,6 +333,11 @@ final class AudioRecorder: NSObject {
                 self.sampleCounter += 1
                 if self.sampleCounter % 2 == 0 {
                     self.amplitudeHistory.append(self.smoothedAmplitude)
+                }
+                
+                // Update Live Activity every 2 ticks (~0.2 seconds / 5Hz) for smooth animation
+                if self.sampleCounter % 2 == 0 {
+                    self.updateLiveActivity()
                 }
             }
         }
@@ -507,18 +513,44 @@ final class AudioRecorder: NSObject {
 
     // MARK: - Live Activity
 
+    /// Compute per-bar height levels for the waveform visualization.
+    /// Runs in the main app so the widget doesn't need TimelineView or Canvas.
+    private func computeBarLevels(audioLevel: Double, time: Double, count: Int) -> [Double] {
+        var levels = [Double](repeating: 0, count: count)
+        for i in 0..<count {
+            let barIndex = Double(i)
+            let normalizedPos = Double(i) / Double(max(count - 1, 1))
+            let centerDist = abs(normalizedPos - 0.5) * 2.0
+            let envelope = 1.0 - (centerDist * centerDist * 0.5)
+
+            let t1 = time * 2.5 + barIndex * 0.4
+            let t2 = time * 1.6 + barIndex * 0.6
+            let t3 = time * 3.2 + barIndex * 0.2
+
+            let wave = 0.3 + sin(t1) * 0.35 + cos(t2) * 0.25 + sin(t3) * 0.15
+            let height = abs(wave) * envelope * max(0.25, min(1.0, audioLevel * 2.0))
+            levels[i] = max(0.05, min(1.0, height))
+        }
+        return levels
+    }
+
     private func startLiveActivity() {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
-        let title = "Recording \(formatter.string(from: Date()))"
+        let title = "\(L10n.recordingLive) \(formatter.string(from: Date()))"
 
         let attributes = RecordingActivityAttributes(title: title)
         let state = RecordingActivityAttributes.ContentState(
             isPaused: false,
             timerStart: recordingStartDate,
-            pausedAt: 0
+            pausedAt: 0,
+            audioLevel: 0.0,
+            updateCount: 0,
+            barLevels: computeBarLevels(audioLevel: 0.0, time: Date().timeIntervalSinceReferenceDate, count: 30),
+            recordingStatusText: L10n.recordingLive,
+            pausedStatusText: L10n.pausedLive
         )
 
         do {
@@ -534,14 +566,38 @@ final class AudioRecorder: NSObject {
 
     private func updateLiveActivity() {
         guard let activity = liveActivity else { return }
+        
+        // Throttle: ensure minimum 0.15s between updates to prevent system throttling
+        let now = Date()
+        let timeSinceLastUpdate = now.timeIntervalSince(lastLiveActivityUpdate)
+        guard timeSinceLastUpdate >= 0.15 else { return }
+        
+        lastLiveActivityUpdate = now
+        liveActivityUpdateCount += 1
+
+        let audioLevel = Double(smoothedAmplitude)
+        let barLevels = computeBarLevels(
+            audioLevel: audioLevel,
+            time: now.timeIntervalSinceReferenceDate,
+            count: 30
+        )
 
         let state = RecordingActivityAttributes.ContentState(
             isPaused: isPaused,
             timerStart: recordingStartDate,
-            pausedAt: currentTime
+            pausedAt: currentTime,
+            audioLevel: audioLevel,
+            updateCount: liveActivityUpdateCount,
+            barLevels: barLevels,
+            recordingStatusText: L10n.recordingLive,
+            pausedStatusText: L10n.pausedLive
         )
 
-        Task {
+        // Cancel any pending update
+        pendingLiveActivityUpdate?.cancel()
+        
+        // Create new update task
+        pendingLiveActivityUpdate = Task {
             await activity.update(ActivityContent(state: state, staleDate: nil))
         }
     }
@@ -552,7 +608,12 @@ final class AudioRecorder: NSObject {
         let state = RecordingActivityAttributes.ContentState(
             isPaused: false,
             timerStart: recordingStartDate,
-            pausedAt: currentTime
+            pausedAt: currentTime,
+            audioLevel: Double(smoothedAmplitude),
+            updateCount: liveActivityUpdateCount,
+            barLevels: Array(repeating: 0.05, count: 30),
+            recordingStatusText: L10n.recordingLive,
+            pausedStatusText: L10n.pausedLive
         )
 
         Task {
@@ -563,25 +624,37 @@ final class AudioRecorder: NSObject {
     
     /// End all Live Activities - used when app terminates or force quits
     func endAllLiveActivities() {
+        let emptyBars = Array(repeating: 0.05, count: 30)
+
         // End the current activity if we have a reference
         if let activity = liveActivity {
             let state = RecordingActivityAttributes.ContentState(
                 isPaused: false,
                 timerStart: Date(),
-                pausedAt: 0
+                pausedAt: 0,
+                audioLevel: 0.0,
+                updateCount: 0,
+                barLevels: emptyBars,
+                recordingStatusText: L10n.recordingLive,
+                pausedStatusText: L10n.pausedLive
             )
             Task {
                 await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
             }
             liveActivity = nil
         }
-        
+
         // Also end any orphaned activities
         for activity in Activity<RecordingActivityAttributes>.activities {
             let state = RecordingActivityAttributes.ContentState(
                 isPaused: false,
                 timerStart: Date(),
-                pausedAt: 0
+                pausedAt: 0,
+                audioLevel: 0.0,
+                updateCount: 0,
+                barLevels: emptyBars,
+                recordingStatusText: L10n.recordingLive,
+                pausedStatusText: L10n.pausedLive
             )
             Task {
                 await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
@@ -593,7 +666,7 @@ final class AudioRecorder: NSObject {
 
     private func beginBackgroundTask() {
         guard backgroundTaskID == .invalid else { return }
-        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "SignalRecording") { [weak self] in
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "TraceRecording") { [weak self] in
             self?.endBackgroundTask()
         }
     }

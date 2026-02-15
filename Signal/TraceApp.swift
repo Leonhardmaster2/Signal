@@ -5,7 +5,7 @@ import ActivityKit
 import UserNotifications
 
 @main
-struct SignalApp: App {
+struct TraceApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
@@ -49,11 +49,30 @@ struct SignalApp: App {
         }
     }
     
-    /// Handle incoming audio file URLs from share sheet or file picker
+    /// Handle incoming audio file or Trace package URLs from share sheet or file picker
     private func handleIncomingURL(_ url: URL) {
+        let ext = url.pathExtension.lowercased()
+        
+        // Check if it's a Trace package
+        if ext == "trace" || (ext == "zip" && url.lastPathComponent.contains(".trace.")) {
+            Task { @MainActor in
+                let success = await TracePackageExporter.shared.importTracePackage(
+                    from: url,
+                    modelContext: sharedModelContainer.mainContext
+                )
+                if success {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("tracePackageImported"),
+                        object: nil
+                    )
+                }
+            }
+            return
+        }
+        
         // Check if it's an audio file
         let audioExtensions = ["m4a", "mp3", "wav", "aiff", "aif", "caf"]
-        guard audioExtensions.contains(url.pathExtension.lowercased()) else { return }
+        guard audioExtensions.contains(ext) else { return }
         
         // Store the URL for the app to process
         UserDefaults.standard.set(url.absoluteString, forKey: "pendingAudioImport")
@@ -121,21 +140,35 @@ struct SignalApp: App {
     /// End any Live Activities that survived a force-quit.
     /// After a force-quit, the process is dead but the Live Activity can linger.
     private func endOrphanedLiveActivities() {
-        // Only clean up if we're NOT currently recording (fresh launch)
-        guard !AudioRecorder.shared.isRecording else { return }
+        // Only clean up recording activities if we're NOT currently recording (fresh launch)
+        if !AudioRecorder.shared.isRecording {
+            for activity in Activity<RecordingActivityAttributes>.activities {
+                let finalState = RecordingActivityAttributes.ContentState(
+                    isPaused: false,
+                    timerStart: Date(),
+                    pausedAt: 0,
+                    audioLevel: 0.0,
+                    updateCount: 0,
+                    barLevels: Array(repeating: 0.05, count: 30),
+                    recordingStatusText: L10n.recordingLive,
+                    pausedStatusText: L10n.pausedLive
+                )
+                Task {
+                    await activity.end(ActivityContent(state: finalState, staleDate: nil), dismissalPolicy: .immediate)
+                }
+            }
+        }
 
-        let activities = Activity<RecordingActivityAttributes>.activities
-        guard !activities.isEmpty else { return }
-        
-        for activity in activities {
-            let finalState = RecordingActivityAttributes.ContentState(
-                isPaused: false,
-                timerStart: Date(),
-                pausedAt: 0
+        // Always clean up orphaned playback activities on launch
+        for activity in Activity<PlaybackActivityAttributes>.activities {
+            let finalState = PlaybackActivityAttributes.ContentState(
+                isPlaying: false,
+                currentTime: 0,
+                duration: 0,
+                progress: 0
             )
-            let content = ActivityContent(state: finalState, staleDate: nil)
             Task {
-                await activity.end(content, dismissalPolicy: .immediate)
+                await activity.end(ActivityContent(state: finalState, staleDate: nil), dismissalPolicy: .immediate)
             }
         }
     }

@@ -31,7 +31,7 @@ struct SubscriptionOverviewView: View {
                 }
             } label: {
                 HStack {
-                    Text("Manage Subscription")
+                    Text(L10n.manageSubscription)
                         .font(AppFont.mono(size: 13, weight: .medium))
                     Spacer()
                     Image(systemName: "arrow.up.right")
@@ -94,7 +94,7 @@ struct SubscriptionOverviewView: View {
             if subscription.currentTier == .free {
                 // Free tier - show upgrade prompt
                 HStack {
-                    Text("TRANSCRIPTION")
+                    Text(L10n.transcriptionSection)
                         .font(AppFont.mono(size: 10, weight: .medium))
                         .kerning(1.5)
                         .foregroundStyle(.gray)
@@ -108,11 +108,11 @@ struct SubscriptionOverviewView: View {
                         .foregroundStyle(.white.opacity(0.5))
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("15 min/month transcription")
+                        Text(L10n.freeMinPerMonth("15"))
                             .font(AppFont.mono(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                         
-                        Text("Upgrade for AI analysis, unlimited on-device features, and more.")
+                        Text(L10n.upgradeForAI())
                             .font(AppFont.mono(size: 11, weight: .regular))
                             .foregroundStyle(.gray)
                             .lineSpacing(2)
@@ -121,14 +121,14 @@ struct SubscriptionOverviewView: View {
             } else {
                 // Subscribed tier - show usage
                 HStack {
-                    Text("THIS MONTH'S USAGE")
+                    Text(L10n.thisMonthUsage)
                         .font(AppFont.mono(size: 10, weight: .medium))
                         .kerning(1.5)
                         .foregroundStyle(.gray)
                     
                     Spacer()
                     
-                    Text("Resets in \(subscription.daysUntilReset) days")
+                    Text(L10n.resets(in: subscription.daysUntilReset))
                         .font(AppFont.mono(size: 10, weight: .regular))
                         .foregroundStyle(.gray.opacity(0.7))
                 }
@@ -155,7 +155,7 @@ struct SubscriptionOverviewView: View {
                             .font(AppFont.mono(size: 12, weight: .bold))
                             .foregroundStyle(.white)
                         
-                        Text("of \(formatUsedTime(subscription.currentTier.transcriptionLimitSeconds))")
+                        Text(L10n.ofTotal("", formatUsedTime(subscription.currentTier.transcriptionLimitSeconds)))
                             .font(AppFont.mono(size: 12, weight: .regular))
                             .foregroundStyle(.gray)
                         
@@ -199,7 +199,7 @@ struct SubscriptionOverviewView: View {
             HStack {
                 Image(systemName: "sparkles")
                     .font(.system(size: 14))
-                Text("UPGRADE PLAN")
+                Text(L10n.upgradePlan)
                     .font(AppFont.mono(size: 12, weight: .bold))
                     .kerning(1.5)
             }
@@ -228,12 +228,12 @@ struct PaywallView: View {
                 VStack(spacing: 24) {
                     // Header
                     VStack(spacing: 8) {
-                        Text("UNLOCK SIGNAL")
+                        Text(L10n.unlockSignal)
                             .font(AppFont.mono(size: 24, weight: .bold))
                             .kerning(3.0)
                             .foregroundStyle(.white)
                         
-                        Text("Choose the plan that works for you")
+                        Text(L10n.choosePlan)
                             .font(AppFont.mono(size: 14, weight: .regular))
                             .foregroundStyle(.gray)
                     }
@@ -244,7 +244,7 @@ struct PaywallView: View {
                         billingPeriodToggle
                         
                         if isYearly {
-                            Text("Save up to 33% with annual billing")
+                            Text(L10n.saveWithAnnual)
                                 .font(AppFont.mono(size: 11, weight: .medium))
                                 .foregroundStyle(.green)
                         }
@@ -323,7 +323,7 @@ struct PaywallView: View {
                             await subscription.restorePurchases()
                         }
                     } label: {
-                        Text("Restore Purchases")
+                        Text(L10n.restorePurchases)
                             .font(AppFont.mono(size: 12, weight: .medium))
                             .foregroundStyle(.gray)
                     }
@@ -340,7 +340,7 @@ struct PaywallView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
+                    Button(L10n.close) {
                         dismiss()
                     }
                     .font(AppFont.mono(size: 14, weight: .medium))
@@ -352,7 +352,7 @@ struct PaywallView: View {
     
     private var selectedTierFeatures: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("WHAT'S INCLUDED")
+            Text(L10n.whatsIncluded)
                 .font(AppFont.mono(size: 10, weight: .medium))
                 .kerning(1.5)
                 .foregroundStyle(.gray)
@@ -387,7 +387,7 @@ struct PaywallView: View {
                         .tint(.black)
                         .scaleEffect(0.8)
                 } else {
-                    Text("SUBSCRIBE TO \(selectedTier.displayName.uppercased())")
+                    Text(L10n.subscribeTo(selectedTier.displayName.uppercased()))
                         .font(AppFont.mono(size: 13, weight: .bold))
                         .kerning(1.5)
                 }
@@ -402,7 +402,7 @@ struct PaywallView: View {
     }
     
     private var termsText: some View {
-        Text("Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your App Store account settings after purchase.")
+        Text(L10n.appleTerms)
             .font(AppFont.mono(size: 9, weight: .regular))
             .foregroundStyle(.gray.opacity(0.7))
             .multilineTextAlignment(.center)
@@ -417,7 +417,7 @@ struct PaywallView: View {
                         isYearly = false
                     }
                 } label: {
-                    Text("MONTHLY")
+                    Text(L10n.monthly.uppercased())
                         .font(AppFont.mono(size: 11, weight: .bold))
                         .kerning(1.5)
                         .foregroundStyle(isYearly ? .white.opacity(0.6) : .white)
@@ -432,7 +432,7 @@ struct PaywallView: View {
                         isYearly = true
                     }
                 } label: {
-                    Text("YEARLY")
+                    Text(L10n.yearly.uppercased())
                         .font(AppFont.mono(size: 11, weight: .bold))
                         .kerning(1.5)
                         .foregroundStyle(isYearly ? .white : .white.opacity(0.6))
@@ -447,7 +447,7 @@ struct PaywallView: View {
     
     private var privacyPackCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("ONE-TIME PURCHASE")
+            Text(L10n.oneTimePurchaseSection)
                 .font(AppFont.mono(size: 10, weight: .medium))
                 .kerning(1.5)
                 .foregroundStyle(.gray)
@@ -461,11 +461,11 @@ struct PaywallView: View {
                                 .foregroundStyle(.green)
                             
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("PRIVACY PACK")
+                                Text(L10n.privacyPack)
                                     .font(AppFont.mono(size: 14, weight: .bold))
                                     .foregroundStyle(.white)
                                 
-                                Text("Transcribe on your phone")
+                                Text(L10n.transcribeOnPhone)
                                     .font(AppFont.mono(size: 11))
                                     .foregroundStyle(.gray)
                             }
@@ -477,7 +477,7 @@ struct PaywallView: View {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 12))
                                     .foregroundStyle(.green)
-                                Text("2 hours of cloud transcription")
+                                Text(L10n.twoHoursCloud)
                                     .font(AppFont.mono(size: 12))
                                     .foregroundStyle(.white)
                             }
@@ -488,7 +488,7 @@ struct PaywallView: View {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 12))
                                         .foregroundStyle(.green)
-                                    Text("Unlimited on-device transcription")
+                                    Text(L10n.unlimitedOnDevice)
                                         .font(AppFont.mono(size: 12))
                                         .foregroundStyle(.white)
                                 }
@@ -497,7 +497,7 @@ struct PaywallView: View {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 12))
                                         .foregroundStyle(.green)
-                                    Text("Private AI summaries on your device")
+                                    Text(L10n.privateAISummaries)
                                         .font(AppFont.mono(size: 12))
                                         .foregroundStyle(.white)
                                 }
@@ -508,7 +508,7 @@ struct PaywallView: View {
                     
                     Spacer()
                     
-                    Text("$3")
+                    Text(L10n.pricePrivacyPack)
                         .font(AppFont.mono(size: 24, weight: .bold))
                         .foregroundStyle(.white)
                 }
@@ -524,7 +524,7 @@ struct PaywallView: View {
                         } else {
                             Image(systemName: "cart.fill")
                                 .font(.system(size: 12))
-                            Text("BUY PRIVACY PACK")
+                            Text(L10n.buyPrivacyPack)
                                 .font(AppFont.mono(size: 12, weight: .bold))
                                 .kerning(1.5)
                         }
@@ -605,7 +605,7 @@ struct TierCard: View {
                             .foregroundStyle(.white)
                         
                         if isCurrent {
-                            Text("CURRENT")
+                            Text(L10n.current)
                                 .font(AppFont.mono(size: 8, weight: .bold))
                                 .kerning(1.0)
                                 .foregroundStyle(.black)
@@ -615,7 +615,7 @@ struct TierCard: View {
                         }
                         
                         if tier.baseLevel == .standard && !isCurrent {
-                            Text("POPULAR")
+                            Text(L10n.popular)
                                 .font(AppFont.mono(size: 8, weight: .bold))
                                 .kerning(1.0)
                                 .foregroundStyle(.black)
@@ -642,7 +642,7 @@ struct TierCard: View {
                             .font(AppFont.mono(size: 9, weight: .medium))
                             .foregroundStyle(.gray)
                         
-                        Text("billed yearly")
+                        Text(L10n.billedYearly)
                             .font(AppFont.mono(size: 8, weight: .regular))
                             .foregroundStyle(.gray.opacity(0.7))
                     } else {
@@ -708,7 +708,7 @@ struct UpgradePromptView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 12))
-                    Text("UPGRADE NOW")
+                    Text(L10n.upgradePlan)
                         .font(AppFont.mono(size: 11, weight: .bold))
                         .kerning(1.5)
                 }
@@ -742,23 +742,23 @@ enum UpgradeReason {
     
     var title: String {
         switch self {
-        case .transcriptionLocked: return "Transcription Locked"
-        case .transcriptionLimit: return "Transcription Limit Reached"
-        case .historyLimit: return "History Limit Reached"
-        case .featureLocked(let feature): return "\(feature) is a Premium Feature"
+        case .transcriptionLocked: return L10n.transcriptionLocked
+        case .transcriptionLimit: return L10n.transcriptionLocked
+        case .historyLimit: return L10n.upgradeUnlimitedHistory
+        case .featureLocked: return L10n.unlockSignal
         }
     }
-    
+
     var message: String {
         switch self {
         case .transcriptionLocked:
-            return "Upgrade to unlock AI transcription and convert your recordings to searchable text."
+            return L10n.upgradeToUnlockTranscription
         case .transcriptionLimit:
-            return "You've used all your transcription hours this month. Upgrade to continue transcribing."
+            return L10n.upgradeToTranscribe
         case .historyLimit:
-            return "Free accounts can only keep 5 recordings. Upgrade for unlimited history."
-        case .featureLocked(let feature):
-            return "Upgrade to Standard or Pro to unlock \(feature)."
+            return L10n.upgradeUnlimitedHistory
+        case .featureLocked:
+            return L10n.upgradeForAI()
         }
     }
 }
@@ -778,12 +778,12 @@ struct UsageBadgeView: View {
                     .frame(width: 24, height: 24)
                 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("FREE")
+                    Text(L10n.free.uppercased())
                         .font(AppFont.mono(size: 9, weight: .bold))
                         .kerning(1.0)
                         .foregroundStyle(.white)
                     
-                    Text("Upgrade to transcribe")
+                    Text(L10n.upgradeToTranscribe)
                         .font(AppFont.mono(size: 8, weight: .regular))
                         .foregroundStyle(.gray)
                 }

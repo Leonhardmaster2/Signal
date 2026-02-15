@@ -9,35 +9,14 @@ struct OnboardingView: View {
     @State private var showCreditOffer = false
     @State private var creditOfferPrice: Double = 3.00
     @State private var hasShownCreditOffer = false
-    
-    private let pages: [OnboardingPage] = [
-        OnboardingPage(
-            icon: "mic.fill",
-            iconColor: .white,
-            title: "Record Everything\nFree Forever",
-            subtitle: "Unlimited audio recording with no restrictions. Capture every meeting, lecture, and conversation.",
-            highlight: "Unlimited recordings • Always free"
-        ),
-        OnboardingPage(
-            icon: "waveform.badge.magnifyingglass",
-            iconColor: .white,
-            title: "Studio-Grade\nAudio Quality",
-            subtitle: "Record in crystal-clear 44kHz quality. Your audio, preserved perfectly.",
-            highlight: "44kHz recording quality"
-        ),
-        OnboardingPage(
-            icon: "brain",
-            iconColor: .white,
-            title: "AI-Powered\nIntelligence",
-            subtitle: "Upgrade to unlock transcription, summaries, and speaker identification. Turn audio into actionable insights.",
-            highlight: "Upgrade for AI features"
-        )
-    ]
-    
+
+    /// Total pages: language picker (0) + 3 content pages (1,2,3)
+    private let totalPages = 4
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 // Skip button
                 HStack {
@@ -45,47 +24,71 @@ struct OnboardingView: View {
                     Button {
                         completeOnboarding()
                     } label: {
-                        Text("Skip")
+                        Text(L10n.skip)
                             .font(AppFont.mono(size: 14, weight: .medium))
                             .foregroundStyle(.gray)
                     }
                     .padding()
                 }
-                
+
                 Spacer()
-                
+
                 // Page content
                 TabView(selection: $currentPage) {
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
-                        OnboardingPageView(page: page)
-                            .tag(index)
-                    }
+                    // Page 0: Language selection
+                    LanguageSelectionPage()
+                        .tag(0)
+
+                    // Page 1-3: Feature pages
+                    OnboardingPageView(
+                        icon: "mic.fill",
+                        iconColor: .white,
+                        title: L10n.onboardingTitle1,
+                        subtitle: L10n.onboardingSubtitle1,
+                        highlight: L10n.onboardingHighlight1
+                    ).tag(1)
+
+                    OnboardingPageView(
+                        icon: "waveform.badge.magnifyingglass",
+                        iconColor: .white,
+                        title: L10n.onboardingTitle2,
+                        subtitle: L10n.onboardingSubtitle2,
+                        highlight: L10n.onboardingHighlight2
+                    ).tag(2)
+
+                    OnboardingPageView(
+                        icon: "brain",
+                        iconColor: .white,
+                        title: L10n.onboardingTitle3,
+                        subtitle: L10n.onboardingSubtitle3,
+                        highlight: L10n.onboardingHighlight3
+                    ).tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                
+
                 Spacer()
-                
+
                 // Page indicator
                 HStack(spacing: 8) {
-                    ForEach(0..<pages.count, id: \.self) { index in
+                    ForEach(0..<totalPages, id: \.self) { index in
                         Circle()
                             .fill(index == currentPage ? Color.white : Color.white.opacity(0.3))
                             .frame(width: 8, height: 8)
                     }
                 }
                 .padding(.bottom, 32)
-                
+
                 // Button container with fixed height to prevent jumping
                 VStack(spacing: 20) {
                     // Upgrade prompt (always shown on last page, above main button)
-                    if currentPage == pages.count - 1 {
+                    if currentPage == totalPages - 1 {
                         Button {
                             showPaywall = true
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 12))
-                                Text("View Premium Plans")
+                                Text(L10n.viewPremiumPlans)
                                     .font(AppFont.mono(size: 12, weight: .medium))
                             }
                             .foregroundStyle(.white.opacity(0.7))
@@ -97,10 +100,10 @@ struct OnboardingView: View {
                         Color.clear
                             .frame(height: 44)
                     }
-                    
+
                     // Main action button
                     Button {
-                        if currentPage < pages.count - 1 {
+                        if currentPage < totalPages - 1 {
                             withAnimation {
                                 currentPage += 1
                             }
@@ -108,7 +111,7 @@ struct OnboardingView: View {
                             completeOnboarding()
                         }
                     } label: {
-                        Text(currentPage < pages.count - 1 ? "CONTINUE" : "GET STARTED")
+                        Text(currentPage < totalPages - 1 ? L10n.continueButton : L10n.getStarted)
                             .font(AppFont.mono(size: 14, weight: .bold))
                             .kerning(2.0)
                             .foregroundStyle(.black)
@@ -120,7 +123,7 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, 32)
                 .frame(height: 96) // Fixed height to prevent jumping
-                
+
                 Spacer()
                     .frame(height: 50)
             }
@@ -168,41 +171,112 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - Onboarding Page Model
+// MARK: - Language Selection Page
 
-struct OnboardingPage {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let subtitle: String
-    let highlight: String
+struct LanguageSelectionPage: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            // Globe icon
+            ZStack {
+                Image(systemName: "globe")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundStyle(.white)
+                    .padding(36)
+            }
+            .glassEffect(.regular, in: Circle())
+
+            Text(L10n.chooseLanguage)
+                .font(AppFont.mono(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+
+            // Language grid
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        LanguageCell(language: lang)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .frame(maxHeight: 300)
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
+// MARK: - Language Cell
+
+private struct LanguageCell: View {
+    let language: AppLanguage
+    @State private var locManager = LocalizationManager.shared
+
+    var isSelected: Bool { locManager.currentLanguage == language }
+
+    var body: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.2)) {
+                locManager.currentLanguage = language
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(language.flag)
+                    .font(.system(size: 18))
+
+                Text(language.nativeName)
+                    .font(AppFont.mono(size: 12, weight: isSelected ? .bold : .regular))
+                    .foregroundStyle(isSelected ? .white : .gray)
+                    .lineLimit(1)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.white.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+        }
+    }
 }
 
 // MARK: - Onboarding Page View
 
 struct OnboardingPageView: View {
-    let page: OnboardingPage
-    
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let subtitle: String
+    let highlight: String
+
     var body: some View {
         VStack(spacing: 32) {
             // Icon with glass effect
             ZStack {
-                Image(systemName: page.icon)
+                Image(systemName: icon)
                     .font(.system(size: 48, weight: .light))
-                    .foregroundStyle(page.iconColor)
+                    .foregroundStyle(iconColor)
                     .padding(36)
             }
             .glassEffect(.regular, in: Circle())
-            
+
             VStack(spacing: 20) {
-                Text(page.title)
+                Text(title)
                     .font(AppFont.mono(size: 22, weight: .bold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
-                
-                Text(page.subtitle)
+
+                Text(subtitle)
                     .font(AppFont.mono(size: 13, weight: .regular))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
@@ -210,9 +284,9 @@ struct OnboardingPageView: View {
                     .padding(.horizontal, 32)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            
+
             // Highlight pill with glass effect
-            Text(page.highlight)
+            Text(highlight)
                 .font(AppFont.mono(size: 11, weight: .bold))
                 .kerning(1.0)
                 .foregroundStyle(.white)
@@ -275,7 +349,7 @@ struct CreditPackOfferView: View {
                 VStack(spacing: 24) {
                     // Badge
                     if price == 3.00 {
-                        Text("ONE-TIME OFFER")
+                        Text(L10n.oneTimeOffer)
                             .font(AppFont.mono(size: 10, weight: .bold))
                             .foregroundStyle(.black)
                             .kerning(1.2)
@@ -284,7 +358,7 @@ struct CreditPackOfferView: View {
                             .background(Color.white)
                             .clipShape(Capsule())
                     } else {
-                        Text("FINAL OFFER")
+                        Text(L10n.finalOffer)
                             .font(AppFont.mono(size: 10, weight: .bold))
                             .foregroundStyle(.black)
                             .kerning(1.2)
@@ -293,9 +367,9 @@ struct CreditPackOfferView: View {
                             .background(Color.red)
                             .clipShape(Capsule())
                     }
-                    
+
                     // Title
-                    Text("Try Before You Subscribe")
+                    Text(L10n.tryBeforeSubscribe)
                         .font(AppFont.mono(size: 20, weight: .bold))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
@@ -321,9 +395,9 @@ struct CreditPackOfferView: View {
                     
                     // Features
                     VStack(spacing: 10) {
-                        OfferFeature(icon: "clock.fill", text: "2 hours of AI transcription")
-                        OfferFeature(icon: "infinity", text: "Credits never expire")
-                        OfferFeature(icon: "xmark.circle.fill", text: "No subscription required")
+                        OfferFeature(icon: "clock.fill", text: L10n.twoHoursTranscription)
+                        OfferFeature(icon: "infinity", text: L10n.creditsNeverExpire)
+                        OfferFeature(icon: "xmark.circle.fill", text: L10n.noSubscriptionRequired)
                     }
                 }
                 
@@ -342,7 +416,7 @@ struct CreditPackOfferView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
                         } else {
-                            Text("GET 2 HOURS")
+                            Text(L10n.get2Hours)
                                 .font(AppFont.mono(size: 13, weight: .bold))
                                 .kerning(1.5)
                                 .foregroundStyle(.black)
@@ -354,7 +428,7 @@ struct CreditPackOfferView: View {
                     .clipShape(Capsule())
                     .disabled(isPurchasing)
                     
-                    Text("One-time purchase • No recurring charges")
+                    Text(L10n.oneTimePurchase)
                         .font(AppFont.mono(size: 9, weight: .regular))
                         .foregroundStyle(.gray)
                 }
@@ -363,8 +437,8 @@ struct CreditPackOfferView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .alert("Purchase Error", isPresented: $showError) {
-            Button("OK", role: .cancel) {}
+        .alert(L10n.purchaseError, isPresented: $showError) {
+            Button(L10n.ok, role: .cancel) {}
         } message: {
             Text(errorMessage)
         }

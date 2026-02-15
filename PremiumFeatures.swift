@@ -8,11 +8,23 @@ struct AudioFileImporter: ViewModifier {
     @Binding var isPresented: Bool
     let onImport: (URL) -> Void
     
+    // Define the trace package UTType
+    private var tracePackageType: UTType {
+        if let type = UTType("com.proceduralabs.trace.package") {
+            return type
+        }
+        // Fallback to treating as zip/archive
+        return .zip
+    }
+    
     func body(content: Content) -> some View {
         content
             .fileImporter(
                 isPresented: $isPresented,
-                allowedContentTypes: [.audio, .mpeg4Audio, .mp3, .wav, .aiff],
+                allowedContentTypes: [
+                    .audio, .mpeg4Audio, .mp3, .wav, .aiff,
+                    tracePackageType, .zip
+                ],
                 allowsMultipleSelection: false
             ) { result in
                 switch result {
@@ -21,40 +33,65 @@ struct AudioFileImporter: ViewModifier {
                         // Need to start accessing security-scoped resource
                         let hasAccess = url.startAccessingSecurityScopedResource()
                         print("📁 [Import] Security-scoped access: \(hasAccess)")
-                        defer { 
-                            if hasAccess { url.stopAccessingSecurityScopedResource() }
+
+                        // Check if it's a .trace package
+                        if url.pathExtension.lowercased() == "trace" ||
+                           (url.pathExtension.lowercased() == "zip" && url.lastPathComponent.contains(".trace.")) {
+                            print("📁 [Import] Detected Trace package, copying while access is active")
+
+                            // Copy the .trace package to temp while we still have security-scoped access
+                            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                            do {
+                                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                                let tempCopy = tempDir.appendingPathComponent(url.lastPathComponent)
+                                try FileManager.default.copyItem(at: url, to: tempCopy)
+
+                                // Release security-scoped access now that we've copied
+                                if hasAccess { url.stopAccessingSecurityScopedResource() }
+
+                                print("📁 [Import] Copied .trace package to temp: \(tempCopy.path)")
+                                onImport(tempCopy)
+                            } catch {
+                                print("❌ [Import] Failed to copy .trace package: \(error)")
+                                if hasAccess { url.stopAccessingSecurityScopedResource() }
+                            }
+                            return
                         }
-                        
-                        // Copy to app's documents directory
+
+                        // Copy audio files to app's documents directory
                         let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
                         let recordingsDir = documentsDir.appendingPathComponent("Recordings", isDirectory: true)
-                        
+
                         do {
                             try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
                         } catch {
                             print("📁 [Import] Failed to create Recordings directory: \(error)")
                         }
-                        
+
                         let fileName = "imported_\(UUID().uuidString).\(url.pathExtension)"
                         let destinationURL = recordingsDir.appendingPathComponent(fileName)
-                        
+
                         print("📁 [Import] Source: \(url.path)")
                         print("📁 [Import] Destination: \(destinationURL.path)")
-                        
+
                         do {
                             // Check if source exists and is readable
                             guard FileManager.default.isReadableFile(atPath: url.path) else {
                                 print("📁 [Import] ERROR: Source file is not readable")
+                                if hasAccess { url.stopAccessingSecurityScopedResource() }
                                 return
                             }
-                            
+
                             // Remove existing file if present
                             if FileManager.default.fileExists(atPath: destinationURL.path) {
                                 try FileManager.default.removeItem(at: destinationURL)
                             }
-                            
+
                             try FileManager.default.copyItem(at: url, to: destinationURL)
-                            
+
+                            // Release security-scoped access after copy
+                            if hasAccess { url.stopAccessingSecurityScopedResource() }
+
                             // Verify the copy succeeded
                             if FileManager.default.fileExists(atPath: destinationURL.path) {
                                 let attrs = try FileManager.default.attributesOfItem(atPath: destinationURL.path)
@@ -66,6 +103,7 @@ struct AudioFileImporter: ViewModifier {
                             }
                         } catch {
                             print("📁 [Import] Failed to copy imported file: \(error)")
+                            if hasAccess { url.stopAccessingSecurityScopedResource() }
                         }
                     }
                 case .failure(let error):
@@ -141,147 +179,244 @@ final class ExportService {
             markdown += "\n"
         }
         
-        markdown += "\n---\n*Exported from Signal*\n"
+        markdown += "\n---\n*Exported from Trace*\n"
         
         return markdown
     }
     
     /// Export transcript as PDF
     func exportAsPDF(recording: Recording) -> Data? {
-        // Create PDF using UIKit/AppKit
         let pageRect = CGRect(x: 0, y: 0, width: 612, height: 792) // Letter size
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
-        
+        let margin: CGFloat = 50
+        let maxWidth = pageRect.width - (margin * 2)
+        let bottomMargin: CGFloat = 80 // Space reserved for footer
+
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedSystemFont(ofSize: 24, weight: .bold),
+            .foregroundColor: UIColor.black
+        ]
+
+        let bodyAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: UIColor.darkGray
+        ]
+
+        let headerAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedSystemFont(ofSize: 14, weight: .semibold),
+            .foregroundColor: UIColor.black
+        ]
+
+        let speakerAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedSystemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: UIColor.black
+        ]
+
+        let brandingAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedSystemFont(ofSize: 9, weight: .medium),
+            .foregroundColor: UIColor.darkGray
+        ]
+
+        let footerAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedSystemFont(ofSize: 8, weight: .regular),
+            .foregroundColor: UIColor.lightGray
+        ]
+
+        /// Measure how tall a string will be when drawn in a rect of given width
+        func textHeight(_ text: String, attributes: [NSAttributedString.Key: Any], width: CGFloat) -> CGFloat {
+            let nsText = text as NSString
+            let rect = nsText.boundingRect(
+                with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: attributes,
+                context: nil
+            )
+            return ceil(rect.height)
+        }
+
         let data = renderer.pdfData { context in
-            context.beginPage()
-            
-            let titleAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedSystemFont(ofSize: 24, weight: .bold),
-                .foregroundColor: UIColor.black
-            ]
-            
-            let bodyAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: UIColor.darkGray
-            ]
-            
-            let headerAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedSystemFont(ofSize: 14, weight: .semibold),
-                .foregroundColor: UIColor.black
-            ]
-            
-            let brandingAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedSystemFont(ofSize: 9, weight: .medium),
-                .foregroundColor: UIColor.darkGray
-            ]
-            
-            var yPosition: CGFloat = 40
-            let margin: CGFloat = 50
-            let maxWidth = pageRect.width - (margin * 2)
-            
-            // Signal Logo at top
-            if let logoImage = UIImage(named: "SignalLogoBlackNoBG") {
-                let logoHeight: CGFloat = 30
-                let logoAspectRatio = logoImage.size.width / logoImage.size.height
-                let logoWidth = logoHeight * logoAspectRatio
-                let logoRect = CGRect(x: margin, y: yPosition, width: logoWidth, height: logoHeight)
-                logoImage.draw(in: logoRect)
-                
-                // "Transcribed with Signal" text next to logo
-                let brandingText = "Transcribed with Signal" as NSString
-                let brandingX = margin + logoWidth + 12
-                brandingText.draw(at: CGPoint(x: brandingX, y: yPosition + 10), withAttributes: brandingAttributes)
+            var yPosition: CGFloat = 0
+
+            /// Start a new page and draw header/footer
+            func newPage() {
+                context.beginPage()
+                yPosition = 40
+
+                // Header branding on every page
+                if let logoImage = UIImage(named: "TraceLogoBlackNoBG") {
+                    let logoHeight: CGFloat = 20
+                    let logoAspectRatio = logoImage.size.width / logoImage.size.height
+                    let logoWidth = logoHeight * logoAspectRatio
+                    logoImage.draw(in: CGRect(x: margin, y: yPosition, width: logoWidth, height: logoHeight))
+
+                    let brandingText = "Transcribed with Trace" as NSString
+                    brandingText.draw(at: CGPoint(x: margin + logoWidth + 8, y: yPosition + 4), withAttributes: brandingAttributes)
+                }
+                yPosition += 30
+
+                // Separator
+                context.cgContext.setStrokeColor(UIColor.lightGray.cgColor)
+                context.cgContext.setLineWidth(0.5)
+                context.cgContext.move(to: CGPoint(x: margin, y: yPosition))
+                context.cgContext.addLine(to: CGPoint(x: pageRect.width - margin, y: yPosition))
+                context.cgContext.strokePath()
+                yPosition += 15
             }
-            
-            yPosition += 50
-            
-            // Separator line
-            context.cgContext.setStrokeColor(UIColor.lightGray.cgColor)
-            context.cgContext.setLineWidth(0.5)
-            context.cgContext.move(to: CGPoint(x: margin, y: yPosition))
-            context.cgContext.addLine(to: CGPoint(x: pageRect.width - margin, y: yPosition))
-            context.cgContext.strokePath()
-            yPosition += 20
-            
+
+            /// Draw footer on the current page
+            func drawFooter() {
+                let footerY = pageRect.height - 40
+                context.cgContext.setStrokeColor(UIColor.lightGray.cgColor)
+                context.cgContext.setLineWidth(0.5)
+                context.cgContext.move(to: CGPoint(x: margin, y: footerY))
+                context.cgContext.addLine(to: CGPoint(x: pageRect.width - margin, y: footerY))
+                context.cgContext.strokePath()
+
+                let footerText = "Transcribed with Trace \u{2022} trace.app" as NSString
+                let footerSize = footerText.size(withAttributes: footerAttributes)
+                let footerX = (pageRect.width - footerSize.width) / 2
+                footerText.draw(at: CGPoint(x: footerX, y: footerY + 6), withAttributes: footerAttributes)
+            }
+
+            /// Ensure there's enough space; start a new page if not
+            func ensureSpace(_ needed: CGFloat) {
+                if yPosition + needed > pageRect.height - bottomMargin {
+                    drawFooter()
+                    newPage()
+                }
+            }
+
+            // --- First page ---
+            newPage()
+
             // Title
-            let title = recording.title as NSString
-            title.draw(at: CGPoint(x: margin, y: yPosition), withAttributes: titleAttributes)
-            yPosition += 40
-            
+            let titleHeight = textHeight(recording.title, attributes: titleAttributes, width: maxWidth)
+            (recording.title as NSString).draw(
+                in: CGRect(x: margin, y: yPosition, width: maxWidth, height: titleHeight),
+                withAttributes: titleAttributes
+            )
+            yPosition += titleHeight + 12
+
             // Metadata
-            let dateStr = "Date: \(formatDate(recording.date))" as NSString
-            dateStr.draw(at: CGPoint(x: margin, y: yPosition), withAttributes: bodyAttributes)
-            yPosition += 20
-            
-            let durationStr = "Duration: \(recording.duration.durationLabel)" as NSString
-            durationStr.draw(at: CGPoint(x: margin, y: yPosition), withAttributes: bodyAttributes)
-            yPosition += 40
-            
+            let dateStr = "Date: \(formatDate(recording.date))"
+            (dateStr as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: bodyAttributes)
+            yPosition += 18
+
+            let durationStr = "Duration: \(recording.duration.durationLabel)"
+            (durationStr as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: bodyAttributes)
+            yPosition += 30
+
             // Summary
             if let summary = recording.summary {
+                ensureSpace(80)
                 ("Summary" as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttributes)
-                yPosition += 25
-                
-                let oneLiner = summary.oneLiner as NSString
-                let oneLinerRect = CGRect(x: margin, y: yPosition, width: maxWidth, height: 100)
-                oneLiner.draw(in: oneLinerRect, withAttributes: bodyAttributes)
-                yPosition += 60
-            }
-            
-            // Transcript preview
-            if let segments = recording.transcriptSegments, !segments.isEmpty {
-                // Check if we need a new page
-                if yPosition > pageRect.height - 200 {
-                    context.beginPage()
-                    yPosition = 50
+                yPosition += 22
+
+                // One-liner
+                let oneLinerHeight = textHeight(summary.oneLiner, attributes: bodyAttributes, width: maxWidth)
+                ensureSpace(oneLinerHeight + 10)
+                (summary.oneLiner as NSString).draw(
+                    in: CGRect(x: margin, y: yPosition, width: maxWidth, height: oneLinerHeight),
+                    withAttributes: bodyAttributes
+                )
+                yPosition += oneLinerHeight + 15
+
+                // Context
+                if !summary.context.isEmpty {
+                    ensureSpace(30)
+                    ("Context" as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttributes)
+                    yPosition += 22
+
+                    let contextHeight = textHeight(summary.context, attributes: bodyAttributes, width: maxWidth)
+                    ensureSpace(contextHeight + 10)
+                    (summary.context as NSString).draw(
+                        in: CGRect(x: margin, y: yPosition, width: maxWidth, height: contextHeight),
+                        withAttributes: bodyAttributes
+                    )
+                    yPosition += contextHeight + 15
                 }
-                
+
+                // Action items
+                if !summary.actionVectors.isEmpty {
+                    ensureSpace(30)
+                    ("Action Items" as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttributes)
+                    yPosition += 22
+
+                    for action in summary.actionVectors {
+                        let checkbox = action.isCompleted ? "\u{2611}" : "\u{2610}"
+                        let actionText = "\(checkbox) \(action.assignee): \(action.task)"
+                        let actionHeight = textHeight(actionText, attributes: bodyAttributes, width: maxWidth - 10)
+                        ensureSpace(actionHeight + 6)
+                        (actionText as NSString).draw(
+                            in: CGRect(x: margin + 10, y: yPosition, width: maxWidth - 10, height: actionHeight),
+                            withAttributes: bodyAttributes
+                        )
+                        yPosition += actionHeight + 6
+                    }
+                    yPosition += 10
+                }
+            }
+
+            // Transcript — ALL segments, no limit
+            if let segments = recording.transcriptSegments, !segments.isEmpty {
+                ensureSpace(40)
                 ("Transcript" as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttributes)
                 yPosition += 25
-                
+
                 let speakerNames = recording.speakerNames ?? [:]
                 var previousSpeaker: String? = nil
-                
-                for segment in segments.prefix(20) { // Limit for PDF
-                    if yPosition > pageRect.height - 100 {
-                        context.beginPage()
-                        yPosition = 50
-                    }
-                    
+
+                for segment in segments {
                     let speaker = speakerNames[segment.speaker] ?? segment.speaker
-                    
-                    // Add extra spacing when speaker changes
+                    let timestamp = segment.timestamp.formatted
+
+                    // Extra spacing on speaker change
                     if let prev = previousSpeaker, prev != speaker {
-                        yPosition += 15
+                        yPosition += 10
                     }
-                    
-                    let line = "[\(segment.timestamp.formatted)] \(speaker): \(segment.text)" as NSString
-                    let lineRect = CGRect(x: margin, y: yPosition, width: maxWidth, height: 60)
-                    line.draw(in: lineRect, withAttributes: bodyAttributes)
-                    yPosition += 50
-                    
+
+                    // Speaker + timestamp header
+                    let speakerLine = "[\(timestamp)] \(speaker)"
+                    let speakerHeight = textHeight(speakerLine, attributes: speakerAttributes, width: maxWidth)
+                    ensureSpace(speakerHeight + 20) // at least room for header + some text
+                    (speakerLine as NSString).draw(
+                        in: CGRect(x: margin, y: yPosition, width: maxWidth, height: speakerHeight),
+                        withAttributes: speakerAttributes
+                    )
+                    yPosition += speakerHeight + 3
+
+                    // Segment text
+                    let segmentHeight = textHeight(segment.text, attributes: bodyAttributes, width: maxWidth - 10)
+                    ensureSpace(segmentHeight + 6)
+                    (segment.text as NSString).draw(
+                        in: CGRect(x: margin + 10, y: yPosition, width: maxWidth - 10, height: segmentHeight),
+                        withAttributes: bodyAttributes
+                    )
+                    yPosition += segmentHeight + 8
+
                     previousSpeaker = speaker
                 }
             }
-            
-            // Footer with branding at bottom of last page
-            let footerY = pageRect.height - 60
-            context.cgContext.setStrokeColor(UIColor.lightGray.cgColor)
-            context.cgContext.setLineWidth(0.5)
-            context.cgContext.move(to: CGPoint(x: margin, y: footerY))
-            context.cgContext.addLine(to: CGPoint(x: pageRect.width - margin, y: footerY))
-            context.cgContext.strokePath()
-            
-            let footerText = "Transcribed with Signal • signal.app" as NSString
-            let footerAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedSystemFont(ofSize: 8, weight: .regular),
-                .foregroundColor: UIColor.lightGray
-            ]
-            let footerSize = footerText.size(withAttributes: footerAttributes)
-            let footerX = (pageRect.width - footerSize.width) / 2
-            footerText.draw(at: CGPoint(x: footerX, y: footerY + 8), withAttributes: footerAttributes)
+
+            // Notes
+            if let notes = recording.notes, !notes.isEmpty {
+                ensureSpace(40)
+                ("Notes" as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttributes)
+                yPosition += 22
+
+                let notesHeight = textHeight(notes, attributes: bodyAttributes, width: maxWidth)
+                ensureSpace(notesHeight + 10)
+                (notes as NSString).draw(
+                    in: CGRect(x: margin, y: yPosition, width: maxWidth, height: notesHeight),
+                    withAttributes: bodyAttributes
+                )
+                yPosition += notesHeight + 10
+            }
+
+            // Final footer
+            drawFooter()
         }
-        
+
         return data
     }
     
@@ -290,220 +425,6 @@ final class ExportService {
         formatter.dateStyle = .long
         formatter.timeStyle = .short
         return formatter.string(from: date)
-    }
-}
-
-// MARK: - Audio Search
-
-struct AudioSearchView: View {
-    let recording: Recording
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var searchQuery = ""
-    @State private var searchResults: [SearchResult] = []
-    @State private var isSearching = false
-    
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Search bar
-                HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.gray)
-                    
-                    TextField("Search in transcript...", text: $searchQuery)
-                        .font(AppFont.mono(size: 14))
-                        .foregroundStyle(.white)
-                        .onSubmit {
-                            performSearch()
-                        }
-                    
-                    if !searchQuery.isEmpty {
-                        Button {
-                            searchQuery = ""
-                            searchResults = []
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.gray)
-                        }
-                    }
-                }
-                .padding()
-                .background(Color.white.opacity(0.08))
-                
-                // Results
-                if isSearching {
-                    Spacer()
-                    ProgressView()
-                        .tint(.white)
-                    Text("Searching...")
-                        .font(AppFont.mono(size: 12))
-                        .foregroundStyle(.gray)
-                        .padding(.top, 8)
-                    Spacer()
-                } else if searchResults.isEmpty && !searchQuery.isEmpty {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 32, weight: .thin))
-                            .foregroundStyle(Color.muted)
-                        Text("No results found")
-                            .font(AppFont.mono(size: 14, weight: .medium))
-                            .foregroundStyle(.gray)
-                        Text("Try different keywords")
-                            .font(AppFont.mono(size: 12, weight: .regular))
-                            .foregroundStyle(.gray.opacity(0.7))
-                    }
-                    Spacer()
-                } else if searchResults.isEmpty {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        Image(systemName: "text.magnifyingglass")
-                            .font(.system(size: 32, weight: .thin))
-                            .foregroundStyle(Color.muted)
-                        Text("Search your audio")
-                            .font(AppFont.mono(size: 14, weight: .medium))
-                            .foregroundStyle(.gray)
-                        Text("Find specific moments by searching\nfor words or phrases")
-                            .font(AppFont.mono(size: 12, weight: .regular))
-                            .foregroundStyle(.gray.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                    }
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(searchResults) { result in
-                                SearchResultRow(result: result, recording: recording)
-                            }
-                        }
-                        .padding()
-                    }
-                }
-            }
-            .background(Color.black.ignoresSafeArea())
-            .preferredColorScheme(.dark)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("AUDIO SEARCH")
-                        .font(AppFont.mono(size: 13, weight: .semibold))
-                        .kerning(2.0)
-                        .foregroundStyle(.white)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .font(AppFont.mono(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
-                }
-            }
-        }
-    }
-    
-    private func performSearch() {
-        guard !searchQuery.isEmpty, let segments = recording.transcriptSegments else { return }
-        
-        isSearching = true
-        searchResults = []
-        
-        Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            
-            let query = searchQuery.lowercased()
-            var results: [SearchResult] = []
-            
-            let speakerNames = recording.speakerNames ?? [:]
-            
-            for (index, segment) in segments.enumerated() {
-                if segment.text.lowercased().contains(query) {
-                    let speaker = speakerNames[segment.speaker] ?? segment.speaker
-                    results.append(SearchResult(
-                        segmentIndex: index,
-                        speaker: speaker,
-                        text: segment.text,
-                        timestamp: segment.timestamp,
-                        matchedQuery: searchQuery
-                    ))
-                }
-            }
-            
-            await MainActor.run {
-                searchResults = results
-                isSearching = false
-            }
-        }
-    }
-}
-
-struct SearchResult: Identifiable {
-    let id = UUID()
-    let segmentIndex: Int
-    let speaker: String
-    let text: String
-    let timestamp: TimeInterval
-    let matchedQuery: String
-}
-
-struct SearchResultRow: View {
-    let result: SearchResult
-    let recording: Recording
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(result.timestamp.formatted)
-                    .font(AppFont.mono(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
-                
-                Text("•")
-                    .foregroundStyle(.gray)
-                
-                Text(result.speaker)
-                    .font(AppFont.mono(size: 11, weight: .medium))
-                    .foregroundStyle(.gray)
-                
-                Spacer()
-                
-                Image(systemName: "play.circle")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            
-            // Highlighted text
-            highlightedText
-        }
-        .padding(12)
-        .glassCard(radius: 10)
-    }
-    
-    private var highlightedText: some View {
-        let text = result.text
-        let query = result.matchedQuery.lowercased()
-        
-        if let range = text.lowercased().range(of: query) {
-            let before = String(text[..<range.lowerBound])
-            let match = String(text[range])
-            let after = String(text[range.upperBound...])
-            
-            var attributed = AttributedString(before)
-            attributed.font = .system(size: 13, weight: .regular, design: .monospaced)
-            attributed.foregroundColor = .gray
-            
-            var matchAttr = AttributedString(match)
-            matchAttr.font = .system(size: 13, weight: .bold, design: .monospaced)
-            matchAttr.foregroundColor = .white
-            
-            var afterAttr = AttributedString(after)
-            afterAttr.font = .system(size: 13, weight: .regular, design: .monospaced)
-            afterAttr.foregroundColor = .gray
-            
-            return Text(attributed + matchAttr + afterAttr)
-        } else {
-            return Text(text)
-                .font(AppFont.mono(size: 13, weight: .regular))
-                .foregroundStyle(.gray)
-        }
     }
 }
 
@@ -576,7 +497,7 @@ enum PremiumFeature {
         case .exportPDF: return "Export to PDF"
         case .exportMarkdown: return "Export to Markdown"
         case .speakerIdentification: return "Speaker Identification"
-        case .audioSearch: return "Audio Search"
+        case .audioSearch: return "Ask Your Audio"
         case .priorityProcessing: return "Priority Processing"
         case .longFileUpload: return "Long File Upload"
         case .unlimitedHistory: return "Unlimited History"

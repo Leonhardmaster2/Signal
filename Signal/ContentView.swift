@@ -73,9 +73,9 @@ struct AdaptiveSplitView: View {
         return grouped.sorted { $0.key > $1.key }.map { (key, value) in
             let label: String
             if calendar.isDateInToday(key) {
-                label = "TODAY"
+                label = L10n.today
             } else if calendar.isDateInYesterday(key) {
-                label = "YESTERDAY"
+                label = L10n.yesterday
             } else {
                 let formatter = DateFormatter()
                 formatter.dateFormat = "EEEE, MMM d"
@@ -95,7 +95,7 @@ struct AdaptiveSplitView: View {
                 .navigationTitle("")
                 .toolbar {
                     ToolbarItem(placement: .principal) {
-                        Text("SIGNAL")
+                        Text("TRACE")
                             .font(AppFont.mono(size: 13, weight: .semibold))
                             .kerning(4.0)
                             .foregroundStyle(.white)
@@ -148,20 +148,20 @@ struct AdaptiveSplitView: View {
                 showRecorder = true
             }
         }
-        .alert("Delete Recording", isPresented: Binding(
+        .alert(L10n.deleteRecording, isPresented: Binding(
             get: { recordingToDelete != nil },
             set: { if !$0 { recordingToDelete = nil } }
         )) {
-            Button("Cancel", role: .cancel) {
+            Button(L10n.cancel, role: .cancel) {
                 recordingToDelete = nil
             }
-            Button("Delete", role: .destructive) {
+            Button(L10n.delete, role: .destructive) {
                 if let recording = recordingToDelete {
                     deleteRecording(recording)
                 }
             }
         } message: {
-            Text("This will permanently delete the recording and its audio file.")
+            Text(L10n.deleteRecordingMessage)
         }
         .audioFileImporter(isPresented: $showAudioImporter) { url in
             importAudioFile(url: url)
@@ -174,6 +174,21 @@ struct AdaptiveSplitView: View {
     // MARK: - Audio Import
     
     private func importAudioFile(url: URL) {
+        // Check if it's a .trace package
+        if url.pathExtension.lowercased() == "trace" || 
+           (url.pathExtension.lowercased() == "zip" && url.lastPathComponent.contains(".trace.")) {
+            Task {
+                let success = await TracePackageExporter.shared.importTracePackage(
+                    from: url,
+                    modelContext: modelContext
+                )
+                if !success {
+                    print("❌ Failed to import Trace package")
+                }
+            }
+            return
+        }
+        
         // Extract filename without extension for title
         let title = url.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: "imported_", with: "")
@@ -261,7 +276,7 @@ struct AdaptiveSplitView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.muted)
             
-            TextField("Search signals...", text: $searchText)
+            TextField(L10n.searchRecordings, text: $searchText)
                 .font(AppFont.mono(size: 13, weight: .regular))
                 .foregroundStyle(.white)
                 .autocorrectionDisabled()
@@ -286,11 +301,11 @@ struct AdaptiveSplitView: View {
     
     private var sidebarStats: some View {
         HStack(spacing: 0) {
-            sidebarStatCell(value: "\(recordings.count)", label: "SIGNALS")
+            sidebarStatCell(value: "\(recordings.count)", label: L10n.signals)
             sidebarStatDivider
-            sidebarStatCell(value: formatTotalDuration(totalDuration), label: "CAPTURED")
+            sidebarStatCell(value: formatTotalDuration(totalDuration), label: L10n.captured)
             sidebarStatDivider
-            sidebarStatCell(value: "\(decodedCount)", label: "DECODED")
+            sidebarStatCell(value: "\(decodedCount)", label: L10n.decoded)
         }
         .padding(.vertical, 12)
         .glassCard(radius: 10)
@@ -319,11 +334,11 @@ struct AdaptiveSplitView: View {
                 .font(.system(size: 32, weight: .thin))
                 .foregroundStyle(Color.muted)
             
-            Text("No signals yet")
+            Text(L10n.noRecordings)
                 .font(AppFont.mono(size: 14, weight: .medium))
                 .foregroundStyle(.gray)
             
-            Text("Tap Record to capture your first meeting")
+            Text(L10n.tapToRecord)
                 .font(AppFont.mono(size: 12, weight: .regular))
                 .foregroundStyle(.gray.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -390,7 +405,7 @@ struct AdaptiveSplitView: View {
                             .fill(Color.white)
                             .frame(width: 8, height: 8)
                         
-                        Text("RECORD")
+                        Text(L10n.record)
                             .font(AppFont.mono(size: 12, weight: .bold))
                             .kerning(2.0)
                             .foregroundStyle(.white)
@@ -415,12 +430,12 @@ struct AdaptiveSplitView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "archivebox")
                         .font(.system(size: 14))
-                    Text("\(hiddenRecordingsCount) older recording\(hiddenRecordingsCount == 1 ? "" : "s") hidden")
+                    Text("\(hiddenRecordingsCount) \(L10n.olderRecordingsHidden)")
                         .font(AppFont.mono(size: 12, weight: .medium))
                 }
                 .foregroundStyle(.white)
                 
-                Text("Upgrade to unlock unlimited history")
+                Text(L10n.upgradeUnlimitedHistory)
                     .font(AppFont.mono(size: 10, weight: .regular))
                     .foregroundStyle(.gray)
             }
@@ -439,11 +454,11 @@ struct AdaptiveSplitView: View {
                 .foregroundStyle(Color.muted)
             
             VStack(spacing: 8) {
-                Text("Select a Recording")
+                Text(L10n.selectRecording)
                     .font(AppFont.mono(size: 18, weight: .bold))
                     .foregroundStyle(.white)
                 
-                Text("Choose a signal from the sidebar to view its details,\ntranscript, and AI-generated summary.")
+                Text(L10n.selectRecordingHelp)
                     .font(AppFont.mono(size: 13, weight: .regular))
                     .foregroundStyle(.gray)
                     .multilineTextAlignment(.center)
@@ -545,21 +560,21 @@ struct SidebarRecordingRow: View {
             Button {
                 recording.isStarred.toggle()
             } label: {
-                Label(recording.isStarred ? "Unstar" : "Star", systemImage: recording.isStarred ? "star.slash" : "star")
+                Label(recording.isStarred ? L10n.unstar : L10n.star, systemImage: recording.isStarred ? "star.slash" : "star")
             }
             
             Button {
                 recording.isArchived = true
             } label: {
-                Label("Archive", systemImage: "archivebox")
+                Label(L10n.archive, systemImage: "archivebox")
             }
-            
+
             Divider()
-            
+
             Button(role: .destructive) {
                 onDelete()
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label(L10n.delete, systemImage: "trash")
             }
         }
     }

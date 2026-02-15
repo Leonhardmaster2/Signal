@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>Trace</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
@@ -9,14 +15,30 @@
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.signal.transcription</string>
+		<string>com.trace.transcription</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Signal needs microphone access to record audio for transcription and analysis.</string>
+	<string>Trace needs microphone access to record audio for transcription and analysis.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Signal uses speech recognition to transcribe your recordings. Speech recognition supports multiple languages including German, French, Spanish, and more.</string>
+	<string>Trace uses speech recognition to transcribe your recordings. Speech recognition supports multiple languages including German, French, Spanish, and more.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Trace needs calendar access to create events detected in your recordings.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Trace needs reminders access to create tasks detected in your recordings.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Trace Package</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.proceduralabs.trace.package</string>
+			</array>
+			<key>CFBundleTypeIconFile</key>
+			<string>TraceLogoBlackNoBG</string>
+		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Audio Files</string>
@@ -39,6 +61,33 @@
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
+				<string>public.data</string>
+				<string>public.composite-content</string>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Trace Package</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.proceduralabs.trace.package</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>trace</string>
+					<string>trace.zip</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-trace-package</string>
+					<string>application/zip</string>
+				</array>
+			</dict>
+			<key>UTTypeIconFile</key>
+			<string>TraceLogoBlackNoBG</string>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
 				<string>public.audio</string>
 			</array>
 			<key>UTTypeDescription</key>
@@ -58,5 +107,15 @@
 			</dict>
 		</dict>
 	</array>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.com.Proceduralabs.Signal</key>
+		<dict>
+			<key>NSUbiquitousContainerName</key>
+			<string>Trace</string>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+		</dict>
+	</dict>
 </dict>
 </plist>

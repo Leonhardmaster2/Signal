@@ -57,9 +57,9 @@ struct DashboardView: View {
         return grouped.sorted { $0.key > $1.key }.map { (key, value) in
             let label: String
             if calendar.isDateInToday(key) {
-                label = "TODAY"
+                label = L10n.today
             } else if calendar.isDateInYesterday(key) {
-                label = "YESTERDAY"
+                label = L10n.yesterday
             } else {
                 let formatter = DateFormatter()
                 formatter.dateFormat = "EEEE, MMM d"
@@ -88,7 +88,7 @@ struct DashboardView: View {
         .preferredColorScheme(.dark)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("SIGNAL")
+                Text("TRACE")
                     .font(AppFont.mono(size: 13, weight: .semibold))
                     .kerning(4.0)
                     .foregroundStyle(.white)
@@ -153,38 +153,38 @@ struct DashboardView: View {
                 }
             }
         }
-        .alert("Delete Recording", isPresented: Binding(
+        .alert(L10n.deleteRecording, isPresented: Binding(
             get: { recordingToDelete != nil },
             set: { if !$0 { recordingToDelete = nil } }
         )) {
-            Button("Cancel", role: .cancel) {
+            Button(L10n.cancel, role: .cancel) {
                 recordingToDelete = nil
             }
-            Button("Delete", role: .destructive) {
+            Button(L10n.delete, role: .destructive) {
                 if let recording = recordingToDelete {
                     deleteRecording(recording)
                 }
             }
         } message: {
-            Text("This will permanently delete the recording and its audio file. This action cannot be undone.")
+            Text(L10n.deleteRecordingMessage)
         }
-        .alert("Rename Recording", isPresented: Binding(
+        .alert(L10n.renameRecording, isPresented: Binding(
             get: { recordingToRename != nil },
             set: { if !$0 { recordingToRename = nil } }
         )) {
-            TextField("Title", text: $renameText)
-            Button("Save") {
+            TextField(L10n.renameRecording, text: $renameText)
+            Button(L10n.save) {
                 let trimmed = renameText.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty, let recording = recordingToRename {
                     recording.title = trimmed
                 }
                 recordingToRename = nil
             }
-            Button("Cancel", role: .cancel) {
+            Button(L10n.cancel, role: .cancel) {
                 recordingToRename = nil
             }
         } message: {
-            Text("Enter a new name for this recording.")
+            Text(L10n.enterNewName)
         }
         .audioFileImporter(isPresented: $showAudioImporter) { url in
             importAudioFile(url: url)
@@ -206,11 +206,11 @@ struct DashboardView: View {
                     .padding(.horizontal, 40)
 
                 VStack(spacing: 8) {
-                    Text("No signals captured")
+                    Text(L10n.noRecordings)
                         .font(AppFont.mono(size: 18, weight: .bold))
                         .foregroundStyle(.white)
 
-                    Text("Tap the button below to begin\nrecording your first meeting.")
+                    Text(L10n.tapToRecord)
                         .font(AppFont.mono(size: 13, weight: .regular))
                         .foregroundStyle(.gray)
                         .multilineTextAlignment(.center)
@@ -262,7 +262,7 @@ struct DashboardView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(Color.muted)
 
-            TextField("Search signals...", text: $searchText)
+            TextField(L10n.searchRecordings, text: $searchText)
                 .font(AppFont.mono(size: 13, weight: .regular))
                 .foregroundStyle(.white)
                 .autocorrectionDisabled()
@@ -287,11 +287,11 @@ struct DashboardView: View {
 
     private var statsBar: some View {
         HStack(spacing: 0) {
-            statCell(value: "\(recordings.count)", label: "SIGNALS")
+            statCell(value: "\(recordings.count)", label: L10n.signals)
             statDivider
-            statCell(value: formatTotalDuration(totalDuration), label: "CAPTURED")
+            statCell(value: formatTotalDuration(totalDuration), label: L10n.captured)
             statDivider
-            statCell(value: "\(decodedCount)", label: "DECODED")
+            statCell(value: "\(decodedCount)", label: L10n.decoded)
         }
         .padding(.vertical, 14)
         .glassCard(radius: 10)
@@ -323,7 +323,7 @@ struct DashboardView: View {
 
             VStack(spacing: 0) {
                 ForEach(recordings) { recording in
-                    SignalRow(
+                    TraceRow(
                         recording: recording,
                         onRequestDelete: { recordingToDelete = recording },
                         onRequestRename: {
@@ -375,7 +375,7 @@ struct DashboardView: View {
                             .fill(Color.white)
                             .frame(width: 10, height: 10)
 
-                        Text("RECORD")
+                        Text(L10n.record)
                             .font(AppFont.mono(size: 13, weight: .bold))
                             .kerning(2.0)
                             .foregroundStyle(.white)
@@ -400,12 +400,12 @@ struct DashboardView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "archivebox")
                         .font(.system(size: 14))
-                    Text("\(hiddenRecordingsCount) older recording\(hiddenRecordingsCount == 1 ? "" : "s") hidden")
+                    Text("\(hiddenRecordingsCount) \(L10n.olderRecordingsHidden)")
                         .font(AppFont.mono(size: 12, weight: .medium))
                 }
                 .foregroundStyle(.white)
                 
-                Text("Upgrade to unlock unlimited history")
+                Text(L10n.upgradeUnlimitedHistory)
                     .font(AppFont.mono(size: 10, weight: .regular))
                     .foregroundStyle(.gray)
             }
@@ -433,7 +433,22 @@ struct DashboardView: View {
     }
     
     private func importAudioFile(url: URL) {
-        // Check if user has subscription or credits
+        // Check if it's a .trace package
+        if url.pathExtension.lowercased() == "trace" || 
+           (url.pathExtension.lowercased() == "zip" && url.lastPathComponent.contains(".trace.")) {
+            Task {
+                let success = await TracePackageExporter.shared.importTracePackage(
+                    from: url,
+                    modelContext: modelContext
+                )
+                if !success {
+                    print("❌ Failed to import Trace package")
+                }
+            }
+            return
+        }
+        
+        // Check if user has subscription or credits for audio imports
         guard SubscriptionManager.shared.canTranscribeAtAll else {
             // User doesn't have access - show paywall and reject import
             showPaywall = true
@@ -478,7 +493,14 @@ struct DashboardView: View {
                 
                 modelContext.insert(recording)
                 try? modelContext.save()
-                
+
+                // Auto-backup to iCloud if signed in
+                if AppleSignInService.shared.isSignedIn {
+                    Task {
+                        try? await iCloudSyncService.shared.backupRecording(recording)
+                    }
+                }
+
                 // Select the new recording
                 selectedRecording = recording
             }
@@ -486,9 +508,9 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Signal Row
+// MARK: - Trace Row
 
-struct SignalRow: View {
+struct TraceRow: View {
     let recording: Recording
     var onRequestDelete: (() -> Void)?
     var onRequestRename: (() -> Void)?
@@ -549,19 +571,19 @@ struct SignalRow: View {
             Button {
                 onRequestRename?()
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label(L10n.rename, systemImage: "pencil")
             }
 
             Button {
                 recording.isStarred.toggle()
             } label: {
-                Label(recording.isStarred ? "Unstar" : "Star", systemImage: recording.isStarred ? "star.slash" : "star")
+                Label(recording.isStarred ? L10n.unstar : L10n.star, systemImage: recording.isStarred ? "star.slash" : "star")
             }
 
             Button {
                 withAnimation { recording.isArchived = true }
             } label: {
-                Label("Archive", systemImage: "archivebox")
+                Label(L10n.archive, systemImage: "archivebox")
             }
 
             Divider()
@@ -569,7 +591,7 @@ struct SignalRow: View {
             Button(role: .destructive) {
                 onRequestDelete?()
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label(L10n.delete, systemImage: "trash")
             }
         }
         .swipeActions(edge: .leading) {

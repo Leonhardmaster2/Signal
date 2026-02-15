@@ -44,6 +44,9 @@ private struct GeminiSummaryJSON: Decodable {
     let context: String
     let sources: [GeminiSource]?
     let actions: [GeminiAction]
+    let emails: [GeminiEmail]?
+    let reminders: [GeminiReminder]?
+    let calendarEvents: [GeminiCalendarEvent]?
 }
 
 private struct GeminiSource: Decodable {
@@ -54,6 +57,28 @@ private struct GeminiSource: Decodable {
 private struct GeminiAction: Decodable {
     let assignee: String
     let task: String
+    let timestamp: Double?
+}
+
+private struct GeminiEmail: Decodable {
+    let recipient: String
+    let subject: String
+    let body: String
+    let timestamp: Double?
+}
+
+private struct GeminiReminder: Decodable {
+    let title: String
+    let dueDescription: String
+    let dueDate: String?
+    let timestamp: Double?
+}
+
+private struct GeminiCalendarEvent: Decodable {
+    let title: String
+    let dateDescription: String
+    let eventDate: String?
+    let duration: Double?
     let timestamp: Double?
 }
 
@@ -114,7 +139,7 @@ final class SummarizationService {
     ///   - transcript: The transcript text to summarize
     ///   - meetingNotes: Optional user-provided meeting notes
     ///   - language: Optional language code (e.g., "en", "de", "es") - summary will be in this language
-    func summarize(transcript: String, meetingNotes: String? = nil, language: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData]) {
+    func summarize(transcript: String, meetingNotes: String? = nil, language: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData], emails: [EmailActionData], reminders: [ReminderActionData], calendarEvents: [CalendarEventData]) {
         guard let apiKey else { throw SummarizationError.noAPIKey }
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw SummarizationError.noTranscript
@@ -172,10 +197,11 @@ final class SummarizationService {
     // MARK: - Prompt
 
     private func buildPrompt(transcript: String, meetingNotes: String?, language: String?) -> String {
-        // Determine language instruction
+        // Determine language instruction — use transcript language if available, otherwise app language
         let languageInstruction: String
-        if let lang = language, !lang.isEmpty, lang != "en" {
-            let languageName = Locale.current.localizedString(forLanguageCode: lang) ?? lang
+        let effectiveLang = language ?? LocalizationManager.shared.currentLanguage.rawValue
+        if !effectiveLang.isEmpty && effectiveLang != "en" {
+            let languageName = Locale.current.localizedString(forLanguageCode: effectiveLang) ?? effectiveLang
             languageInstruction = "\n- IMPORTANT: Write your entire response (oneLiner, context, sources descriptions, and action tasks) in \(languageName). The transcript is in \(languageName), so respond in the same language."
         } else {
             languageInstruction = ""
@@ -189,6 +215,9 @@ final class SummarizationService {
         - "context": 2-4 sentences providing essential background, key discussion points, and conclusions. When making claims, cite the source timestamp in square brackets [MM:SS].
         - "sources": An array of key moments with "timestamp" (in seconds as a number) and "description" (brief summary of what was discussed at that point).
         - "actions": An array of action items with "assignee" (speaker name or "Team"), "task" (clear, actionable description), and optional "timestamp" (in seconds, where this action was mentioned).
+        - "emails": An array of email-sending references. Include when someone says things like "email John about X", "send the report to Y", "I'll write them an email". Each has "recipient" (person/group name), "subject" (inferred subject line), "body" (suggested brief email body), and optional "timestamp" (seconds). If none found, return an empty array.
+        - "reminders": An array of deadlines or tasks with due dates. Include when someone mentions things like "finish by tonight", "submit the report by Friday", "don't forget to call them tomorrow". Each has "title" (what needs to be done), "dueDescription" (natural language date like "by Friday"), "dueDate" (ISO 8601 format with Z suffix like "2026-02-15T18:00:00Z" if parseable, otherwise null), and optional "timestamp" (seconds). If none found, return an empty array.
+        - "calendarEvents": An array of meetings or events to schedule. Include when someone says things like "let's meet Tuesday at 3pm", "schedule a call for next week", "the presentation is on March 5th". Each has "title" (event name), "dateDescription" (natural language like "Tuesday at 3pm"), "eventDate" (ISO 8601 format with Z suffix like "2026-03-05T15:00:00Z" if parseable, otherwise null), "duration" (in seconds, default 3600), and optional "timestamp" (seconds). If none found, return an empty array.
         - If no clear action items exist, return an empty actions array.
         - Use speaker names as they appear in the transcript.
         - Be concise and factual. No filler.
@@ -199,7 +228,10 @@ final class SummarizationService {
           "oneLiner": "string",
           "context": "string",
           "sources": [{"timestamp": number, "description": "string"}],
-          "actions": [{"assignee": "string", "task": "string", "timestamp": number}]
+          "actions": [{"assignee": "string", "task": "string", "timestamp": number}],
+          "emails": [{"recipient": "string", "subject": "string", "body": "string", "timestamp": number}],
+          "reminders": [{"title": "string", "dueDescription": "string", "dueDate": "string or null", "timestamp": number}],
+          "calendarEvents": [{"title": "string", "dateDescription": "string", "eventDate": "string or null", "duration": number, "timestamp": number}]
         }
 
         TRANSCRIPT:
@@ -219,7 +251,7 @@ final class SummarizationService {
 
     // MARK: - Parsing
 
-    private func parseSummaryJSON(_ text: String) throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData]) {
+    private func parseSummaryJSON(_ text: String) throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData], emails: [EmailActionData], reminders: [ReminderActionData], calendarEvents: [CalendarEventData]) {
         // Clean up potential markdown code fences
         var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.hasPrefix("```json") {
@@ -246,12 +278,47 @@ final class SummarizationService {
         let actions = parsed.actions.map {
             ActionData(assignee: $0.assignee, task: $0.task, isCompleted: false, timestamp: $0.timestamp)
         }
-        
+
         let sources = (parsed.sources ?? []).map {
             SourceData(timestamp: $0.timestamp, description: $0.description)
         }
 
-        return (parsed.oneLiner, parsed.context, actions, sources)
+        // ISO 8601 with fractional seconds: "2026-02-15T18:00:00.000Z"
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        // ISO 8601 with Z suffix: "2026-02-15T18:00:00Z"
+        let isoFormatterBasic = ISO8601DateFormatter()
+        // Fallback: ISO 8601 without timezone: "2026-02-15T18:00:00"
+        let isoNoTZ = DateFormatter()
+        isoNoTZ.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        isoNoTZ.locale = Locale(identifier: "en_US_POSIX")
+        // Fallback: date-only: "2026-02-15"
+        let dateOnly = DateFormatter()
+        dateOnly.dateFormat = "yyyy-MM-dd"
+        dateOnly.locale = Locale(identifier: "en_US_POSIX")
+
+        func parseDate(_ str: String) -> Date? {
+            isoFormatter.date(from: str)
+            ?? isoFormatterBasic.date(from: str)
+            ?? isoNoTZ.date(from: str)
+            ?? dateOnly.date(from: str)
+        }
+
+        let emails = (parsed.emails ?? []).map {
+            EmailActionData(recipient: $0.recipient, subject: $0.subject, body: $0.body, timestamp: $0.timestamp)
+        }
+
+        let reminders = (parsed.reminders ?? []).map { r in
+            let date = r.dueDate.flatMap { parseDate($0) }
+            return ReminderActionData(title: r.title, dueDescription: r.dueDescription, dueDate: date, timestamp: r.timestamp)
+        }
+
+        let calendarEvents = (parsed.calendarEvents ?? []).map { e in
+            let date = e.eventDate.flatMap { parseDate($0) }
+            return CalendarEventData(title: e.title, dateDescription: e.dateDescription, eventDate: date, duration: e.duration, timestamp: e.timestamp)
+        }
+
+        return (parsed.oneLiner, parsed.context, actions, sources, emails, reminders, calendarEvents)
     }
     
     // MARK: - Unified Summarization (Routes to On-Device or Cloud)
@@ -262,6 +329,9 @@ final class SummarizationService {
         let context: String
         let actions: [ActionData]
         let sources: [SourceData]
+        let emails: [EmailActionData]
+        let reminders: [ReminderActionData]
+        let calendarEvents: [CalendarEventData]
         let wasOnDevice: Bool
     }
     
@@ -284,6 +354,9 @@ final class SummarizationService {
                 context: result.context,
                 actions: result.actions,
                 sources: result.sources ?? [],
+                emails: [],
+                reminders: [],
+                calendarEvents: [],
                 wasOnDevice: true
             )
         } else {
@@ -294,6 +367,9 @@ final class SummarizationService {
                 context: result.context,
                 actions: result.actions,
                 sources: result.sources,
+                emails: result.emails,
+                reminders: result.reminders,
+                calendarEvents: result.calendarEvents,
                 wasOnDevice: false
             )
         }

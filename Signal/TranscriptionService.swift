@@ -335,10 +335,10 @@ final class TranscriptionService {
             // Use cloud transcription (ElevenLabs)
             let response = try await transcribe(fileURL: audioURLToTranscribe, diarize: diarize)
             
-            // Remap timestamps if silence was trimmed
+            // Remap timestamps if audio was processed (sped up and/or silence trimmed)
             let remappedResponse: ScribeResponse
-            if let map = segmentMap, map.hasTrimming {
-                print("🔄 [TranscriptionService] Remapping timestamps to original audio timeline")
+            if let map = segmentMap {
+                print("🔄 [TranscriptionService] Remapping timestamps to original audio timeline (speed: \(map.speedMultiplier)x, trimming: \(map.hasTrimming))")
                 remappedResponse = remapTimestamps(response: response, segmentMap: map)
             } else {
                 remappedResponse = response

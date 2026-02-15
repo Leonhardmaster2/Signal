@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import os
 
-private let overviewLogger = Logger(subsystem: "com.Proceduralabs.Signal", category: "Transcription")
+private let overviewLogger = Logger(subsystem: "com.Proceduralabs.Trace", category: "Transcription")
 
 struct RecordingOverviewSheet: View {
     @Bindable var recording: Recording
@@ -47,7 +47,7 @@ struct RecordingOverviewSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Discard") {
+                    Button(L10n.discard) {
                         showDeleteConfirm = true
                     }
                     .font(AppFont.mono(size: 14, weight: .regular))
@@ -55,22 +55,22 @@ struct RecordingOverviewSheet: View {
                 }
 
                 ToolbarItem(placement: .principal) {
-                    TrackedLabel("REVIEW", size: 13, weight: .semibold)
+                    TrackedLabel(L10n.review, size: 13, weight: .semibold)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(L10n.save) {
                         save()
                     }
                     .font(AppFont.mono(size: 14, weight: .bold))
                     .foregroundStyle(.white)
                 }
             }
-            .alert("Discard Recording?", isPresented: $showDeleteConfirm) {
-                Button("Discard", role: .destructive) { discardRecording() }
-                Button("Cancel", role: .cancel) { }
+            .alert(L10n.discardRecording, isPresented: $showDeleteConfirm) {
+                Button(L10n.discard, role: .destructive) { discardRecording() }
+                Button(L10n.cancel, role: .cancel) { }
             } message: {
-                Text("This recording will be permanently deleted.")
+                Text(L10n.discardMessage)
             }
             .sheet(isPresented: $showShareSheet) {
                 if let url = recording.audioURL {
@@ -96,7 +96,7 @@ struct RecordingOverviewSheet: View {
 
     private var waveformSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TrackedLabel("WAVEFORM", size: 10, kerning: 1.5)
+            TrackedLabel(L10n.waveform, size: 10, kerning: 1.5)
 
             GeometryReader { geo in
                 let width = geo.size.width
@@ -194,7 +194,7 @@ struct RecordingOverviewSheet: View {
 
                 Spacer()
 
-                Text("TRIMMED: \(trimmedDuration.formatted)")
+                Text("\(L10n.trimmed): \(trimmedDuration.formatted)")
                     .font(AppFont.mono(size: 11, weight: .medium))
                     .kerning(0.8)
                     .foregroundStyle(.gray)
@@ -292,7 +292,7 @@ struct RecordingOverviewSheet: View {
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TrackedLabel("RECORDING INFO", size: 10, kerning: 1.5)
+            TrackedLabel(L10n.recordingInfo, size: 10, kerning: 1.5)
 
             HStack(spacing: 0) {
                 infoCell(value: recording.formattedDuration, label: "TOTAL")
@@ -327,7 +327,7 @@ struct RecordingOverviewSheet: View {
 
     private var titleSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TrackedLabel("TITLE", size: 10, kerning: 1.5)
+            TrackedLabel(L10n.titleLabel, size: 10, kerning: 1.5)
 
             TextField("", text: $editedTitle)
                 .font(AppFont.mono(size: 18, weight: .bold))
@@ -347,7 +347,7 @@ struct RecordingOverviewSheet: View {
 
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TrackedLabel("ACTIONS", size: 10, kerning: 1.5)
+            TrackedLabel(L10n.actions, size: 10, kerning: 1.5)
 
             // Transcribe button (primary CTA — stays white)
             Button {
@@ -358,7 +358,7 @@ struct RecordingOverviewSheet: View {
                     Image(systemName: "waveform.badge.magnifyingglass")
                         .font(.system(size: 16))
 
-                    Text("SAVE & TRANSCRIBE")
+                    Text(L10n.saveAndTranscribe)
                         .font(AppFont.mono(size: 13, weight: .bold))
                         .kerning(1.0)
                 }
@@ -377,7 +377,7 @@ struct RecordingOverviewSheet: View {
                     Image(systemName: "arrow.down.circle")
                         .font(.system(size: 16))
 
-                    Text("SAVE WITHOUT TRANSCRIBING")
+                    Text(L10n.saveWithoutTranscribing)
                         .font(AppFont.mono(size: 12, weight: .medium))
                         .kerning(0.8)
                 }
@@ -396,7 +396,7 @@ struct RecordingOverviewSheet: View {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 16))
 
-                        Text("SHARE AUDIO FILE")
+                        Text(L10n.shareAudioFile)
                             .font(AppFont.mono(size: 12, weight: .medium))
                             .kerning(0.8)
                     }

@@ -198,11 +198,11 @@ struct OnDeviceBadge: View {
     private var labelText: String {
         switch type {
         case .transcription:
-            return "ON-DEVICE"
+            return L10n.onDeviceBadge
         case .summarization:
-            return "APPLE AI"
+            return L10n.appleAIBadge
         case .both:
-            return "ON-DEVICE"
+            return L10n.onDeviceBadge
         }
     }
 }
