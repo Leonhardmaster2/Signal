@@ -1,14 +1,14 @@
 import Foundation
 
-// MARK: - Chat Message (Ephemeral)
+// MARK: - Chat Message (Persisted)
 
-struct ChatMessage: Identifiable, Equatable {
+struct ChatMessage: Identifiable, Equatable, Codable {
     let id: UUID
     let role: ChatRole
     let content: String
     let timestamp: Date
 
-    enum ChatRole: Equatable {
+    enum ChatRole: String, Equatable, Codable {
         case user
         case model
     }
@@ -18,6 +18,43 @@ struct ChatMessage: Identifiable, Equatable {
         self.role = role
         self.content = content
         self.timestamp = Date()
+    }
+}
+
+// MARK: - Chat Persistence
+
+/// Persists chat messages per recording as JSON files on disk.
+/// Avoids SwiftData schema migrations and keeps chat data separate from core recording data.
+enum ChatPersistence {
+    private static var chatDirectory: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("ChatHistory", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private static func fileURL(for recordingUID: UUID) -> URL {
+        chatDirectory.appendingPathComponent("\(recordingUID.uuidString).json")
+    }
+
+    static func load(for recordingUID: UUID) -> [ChatMessage] {
+        let url = fileURL(for: recordingUID)
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let messages = try? JSONDecoder().decode([ChatMessage].self, from: data)
+        else { return [] }
+        return messages
+    }
+
+    static func save(_ messages: [ChatMessage], for recordingUID: UUID) {
+        let url = fileURL(for: recordingUID)
+        guard let data = try? JSONEncoder().encode(messages) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    static func delete(for recordingUID: UUID) {
+        let url = fileURL(for: recordingUID)
+        try? FileManager.default.removeItem(at: url)
     }
 }
 
@@ -127,12 +164,13 @@ final class ChatService {
         let formattedTranscript = formatTranscript(segments: segments, speakerNames: speakerNames)
         let userLanguage = LocalizationManager.shared.currentLanguage.englishName
         let currentDate = Date().formatted(date: .long, time: .omitted)
+        let usageContext = UserUsageType.saved?.promptContext ?? ""
         let systemPrompt = """
         You are a helpful assistant that answers questions about a recorded audio transcript.
         The full transcript is provided below with timestamps and speaker labels.
 
         Today's date is \(currentDate). Always use this as your reference for the current date and year.
-
+        \(usageContext.isEmpty ? "" : "\n\(usageContext)\n")
         IMPORTANT: Always respond in \(userLanguage). The user's app language is set to \(userLanguage).
 
         When referencing specific parts of the transcript, ALWAYS cite the timestamp in the format [MM:SS].

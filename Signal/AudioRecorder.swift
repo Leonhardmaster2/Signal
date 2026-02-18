@@ -45,8 +45,6 @@ final class AudioRecorder: NSObject {
     // Live Activity
     private var liveActivity: Activity<RecordingActivityAttributes>?
     private var recordingStartDate: Date = .now
-    private var liveActivityUpdateCount: Int = 0
-    private var lastLiveActivityUpdate: Date = .distantPast
     private var pendingLiveActivityUpdate: Task<Void, Never>?
 
     // Audio session handling
@@ -329,16 +327,12 @@ final class AudioRecorder: NSObject {
                 self.smoothedAmplitude = self.smoothedAmplitude * self.smoothingFactor
                     + linear * (1.0 - self.smoothingFactor)
 
-                // Store waveform sample
+                // Store waveform sample for in-app visualization
                 self.sampleCounter += 1
                 if self.sampleCounter % 2 == 0 {
                     self.amplitudeHistory.append(self.smoothedAmplitude)
                 }
-                
-                // Update Live Activity every 2 ticks (~0.2 seconds / 5Hz) for smooth animation
-                if self.sampleCounter % 2 == 0 {
-                    self.updateLiveActivity()
-                }
+                // No Live Activity updates here — waveform runs via KeyframeAnimator on GPU
             }
         }
     }
@@ -513,27 +507,6 @@ final class AudioRecorder: NSObject {
 
     // MARK: - Live Activity
 
-    /// Compute per-bar height levels for the waveform visualization.
-    /// Runs in the main app so the widget doesn't need TimelineView or Canvas.
-    private func computeBarLevels(audioLevel: Double, time: Double, count: Int) -> [Double] {
-        var levels = [Double](repeating: 0, count: count)
-        for i in 0..<count {
-            let barIndex = Double(i)
-            let normalizedPos = Double(i) / Double(max(count - 1, 1))
-            let centerDist = abs(normalizedPos - 0.5) * 2.0
-            let envelope = 1.0 - (centerDist * centerDist * 0.5)
-
-            let t1 = time * 2.5 + barIndex * 0.4
-            let t2 = time * 1.6 + barIndex * 0.6
-            let t3 = time * 3.2 + barIndex * 0.2
-
-            let wave = 0.3 + sin(t1) * 0.35 + cos(t2) * 0.25 + sin(t3) * 0.15
-            let height = abs(wave) * envelope * max(0.25, min(1.0, audioLevel * 2.0))
-            levels[i] = max(0.05, min(1.0, height))
-        }
-        return levels
-    }
-
     private func startLiveActivity() {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
@@ -546,9 +519,6 @@ final class AudioRecorder: NSObject {
             isPaused: false,
             timerStart: recordingStartDate,
             pausedAt: 0,
-            audioLevel: 0.0,
-            updateCount: 0,
-            barLevels: computeBarLevels(audioLevel: 0.0, time: Date().timeIntervalSinceReferenceDate, count: 30),
             recordingStatusText: L10n.recordingLive,
             pausedStatusText: L10n.pausedLive
         )
@@ -564,39 +534,20 @@ final class AudioRecorder: NSObject {
         }
     }
 
+    /// Only called on state transitions (pause/resume/interrupt) — not during active recording.
+    /// The waveform animation runs autonomously via KeyframeAnimator on the GPU.
     private func updateLiveActivity() {
         guard let activity = liveActivity else { return }
-        
-        // Throttle: ensure minimum 0.15s between updates to prevent system throttling
-        let now = Date()
-        let timeSinceLastUpdate = now.timeIntervalSince(lastLiveActivityUpdate)
-        guard timeSinceLastUpdate >= 0.15 else { return }
-        
-        lastLiveActivityUpdate = now
-        liveActivityUpdateCount += 1
-
-        let audioLevel = Double(smoothedAmplitude)
-        let barLevels = computeBarLevels(
-            audioLevel: audioLevel,
-            time: now.timeIntervalSinceReferenceDate,
-            count: 30
-        )
 
         let state = RecordingActivityAttributes.ContentState(
             isPaused: isPaused,
             timerStart: recordingStartDate,
             pausedAt: currentTime,
-            audioLevel: audioLevel,
-            updateCount: liveActivityUpdateCount,
-            barLevels: barLevels,
             recordingStatusText: L10n.recordingLive,
             pausedStatusText: L10n.pausedLive
         )
 
-        // Cancel any pending update
         pendingLiveActivityUpdate?.cancel()
-        
-        // Create new update task
         pendingLiveActivityUpdate = Task {
             await activity.update(ActivityContent(state: state, staleDate: nil))
         }
@@ -606,12 +557,9 @@ final class AudioRecorder: NSObject {
         guard let activity = liveActivity else { return }
 
         let state = RecordingActivityAttributes.ContentState(
-            isPaused: false,
+            isPaused: true,
             timerStart: recordingStartDate,
             pausedAt: currentTime,
-            audioLevel: Double(smoothedAmplitude),
-            updateCount: liveActivityUpdateCount,
-            barLevels: Array(repeating: 0.05, count: 30),
             recordingStatusText: L10n.recordingLive,
             pausedStatusText: L10n.pausedLive
         )
@@ -624,40 +572,24 @@ final class AudioRecorder: NSObject {
     
     /// End all Live Activities - used when app terminates or force quits
     func endAllLiveActivities() {
-        let emptyBars = Array(repeating: 0.05, count: 30)
+        let endState = RecordingActivityAttributes.ContentState(
+            isPaused: true,
+            timerStart: Date(),
+            pausedAt: 0,
+            recordingStatusText: L10n.recordingLive,
+            pausedStatusText: L10n.pausedLive
+        )
 
-        // End the current activity if we have a reference
         if let activity = liveActivity {
-            let state = RecordingActivityAttributes.ContentState(
-                isPaused: false,
-                timerStart: Date(),
-                pausedAt: 0,
-                audioLevel: 0.0,
-                updateCount: 0,
-                barLevels: emptyBars,
-                recordingStatusText: L10n.recordingLive,
-                pausedStatusText: L10n.pausedLive
-            )
             Task {
-                await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
+                await activity.end(ActivityContent(state: endState, staleDate: nil), dismissalPolicy: .immediate)
             }
             liveActivity = nil
         }
 
-        // Also end any orphaned activities
         for activity in Activity<RecordingActivityAttributes>.activities {
-            let state = RecordingActivityAttributes.ContentState(
-                isPaused: false,
-                timerStart: Date(),
-                pausedAt: 0,
-                audioLevel: 0.0,
-                updateCount: 0,
-                barLevels: emptyBars,
-                recordingStatusText: L10n.recordingLive,
-                pausedStatusText: L10n.pausedLive
-            )
             Task {
-                await activity.end(ActivityContent(state: state, staleDate: nil), dismissalPolicy: .immediate)
+                await activity.end(ActivityContent(state: endState, staleDate: nil), dismissalPolicy: .immediate)
             }
         }
     }

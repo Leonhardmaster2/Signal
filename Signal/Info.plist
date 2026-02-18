@@ -56,14 +56,13 @@
 			</array>
 		</dict>
 	</array>
-	<key>UTImportedTypeDeclarations</key>
+	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
 				<string>public.composite-content</string>
-				<string>public.zip-archive</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Trace Package</string>
@@ -73,38 +72,15 @@
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
-					<string>trace</string>
-					<string>trace.zip</string>
+					<string>traceaudio</string>
 				</array>
 				<key>public.mime-type</key>
 				<array>
 					<string>application/x-trace-package</string>
-					<string>application/zip</string>
 				</array>
 			</dict>
 			<key>UTTypeIconFile</key>
 			<string>TraceLogoBlackNoBG</string>
-		</dict>
-		<dict>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.audio</string>
-			</array>
-			<key>UTTypeDescription</key>
-			<string>Audio File</string>
-			<key>UTTypeIdentifier</key>
-			<string>public.audio</string>
-			<key>UTTypeTagSpecification</key>
-			<dict>
-				<key>public.filename-extension</key>
-				<array>
-					<string>m4a</string>
-					<string>mp3</string>
-					<string>wav</string>
-					<string>aiff</string>
-					<string>aif</string>
-				</array>
-			</dict>
 		</dict>
 	</array>
 	<key>NSUbiquitousContainers</key>

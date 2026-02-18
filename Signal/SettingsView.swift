@@ -930,13 +930,17 @@ struct SettingsView: View {
     }
 
     private func deleteAllRecordings() {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Recordings")
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("Recordings")
         if let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
             for file in files {
                 try? FileManager.default.removeItem(at: file)
             }
         }
+
+        // Delete all chat history files
+        let chatDir = docs.appendingPathComponent("ChatHistory")
+        try? FileManager.default.removeItem(at: chatDir)
 
         do {
             try modelContext.delete(model: Recording.self)

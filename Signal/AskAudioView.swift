@@ -9,6 +9,7 @@ struct AskAudioView: View {
     @State private var inputText = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var copiedMessageID: UUID?
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -69,9 +70,29 @@ struct AskAudioView: View {
                             .foregroundStyle(.white)
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    if !messages.isEmpty {
+                        Button {
+                            messages.removeAll()
+                            errorMessage = nil
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                    }
+                }
             }
             .toolbarBackground(Color.black, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            .onAppear {
+                // Load persisted chat history
+                messages = ChatPersistence.load(for: recording.uid)
+            }
+            .onChange(of: messages) { _, newMessages in
+                // Persist on every change
+                ChatPersistence.save(newMessages, for: recording.uid)
+            }
             // Intercept citation taps via custom URL scheme
             .environment(\.openURL, OpenURLAction { url in
                 if url.scheme == "trace", url.host == "citation",
@@ -157,6 +178,7 @@ struct AskAudioView: View {
 
     private func messageContent(_ message: ChatMessage) -> some View {
         let isUser = message.role == .user
+        let isCopied = copiedMessageID == message.id
         return Text(styledContent(message.content, isUser: isUser))
             .font(AppFont.mono(size: 14, weight: .regular))
             .lineSpacing(5)
@@ -167,8 +189,22 @@ struct AskAudioView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.white.opacity(isUser ? 0.12 : 0.06), lineWidth: 0.5)
+                    .stroke(isCopied ? Color.white.opacity(0.4) : Color.white.opacity(isUser ? 0.12 : 0.06), lineWidth: isCopied ? 1 : 0.5)
             )
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = message.content
+                    copiedMessageID = message.id
+                    // Reset the visual feedback after a moment
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        if copiedMessageID == message.id {
+                            copiedMessageID = nil
+                        }
+                    }
+                } label: {
+                    Label(L10n.copyToClipboard, systemImage: "doc.on.doc")
+                }
+            }
     }
 
     private func styledContent(_ text: String, isUser: Bool) -> AttributedString {

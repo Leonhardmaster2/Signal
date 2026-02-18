@@ -199,6 +199,7 @@ struct DecodedView: View {
                 if let url = recording.audioURL {
                     try? FileManager.default.removeItem(at: url)
                 }
+                ChatPersistence.delete(for: recording.uid)
                 modelContext.delete(recording)
                 dismiss()
             }
@@ -2274,6 +2275,14 @@ struct DecodedView: View {
                     SubscriptionManager.shared.recordTranscriptionUsage(seconds: recording.duration)
                 }
 
+                // Send transcription complete notification
+                NotificationService.shared.notifyTranscriptionComplete(
+                    recordingTitle: recording.title,
+                    recordingUID: recording.uid,
+                    detectedLanguage: result.detectedLanguage,
+                    wasOnDevice: result.wasOnDevice
+                )
+
                 // Auto-chain into summarization
                 summarize()
             } catch is CancellationError {
@@ -2290,6 +2299,13 @@ struct DecodedView: View {
                 recording.transcriptionProgress = 0
                 recording.transcriptionError = error.localizedDescription
                 logger.error("Transcription failed for '\(recording.title)': \(error.localizedDescription)")
+
+                // Send failure notification
+                NotificationService.shared.notifyTranscriptionFailed(
+                    recordingTitle: recording.title,
+                    recordingUID: recording.uid,
+                    errorMessage: error.localizedDescription
+                )
             }
         }
     }
@@ -2323,6 +2339,14 @@ struct DecodedView: View {
                 recording.summaryCalendarEvents = result.calendarEvents
                 recording.wasSummarizedOnDevice = result.wasOnDevice
                 recording.isSummarizing = false
+
+                // Send combined completion notification (transcription + summary done)
+                NotificationService.shared.notifyProcessingComplete(
+                    recordingTitle: recording.title,
+                    recordingUID: recording.uid,
+                    oneLiner: result.oneLiner,
+                    detectedLanguage: recording.transcriptLanguage
+                )
             } catch {
                 recording.isSummarizing = false
                 recording.summarizationError = error.localizedDescription

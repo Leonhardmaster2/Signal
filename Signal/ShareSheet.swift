@@ -121,15 +121,15 @@ final class TracePackageExporter {
     
     private init() {}
     
-    /// Create a Trace package (.trace) that includes audio, transcript, and metadata
-    /// Returns a ZIP file URL for cross-platform sharing compatibility
+    /// Create a Trace package (.traceaudio) that includes audio, transcript, and metadata
+    /// Returns a directory URL for sharing
     func createTracePackage(recording: Recording) -> URL? {
         // Create temporary directory for package
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        
+
         // Create package structure
-        let packageName = "\(recording.title).trace"
+        let packageName = "\(recording.title).traceaudio"
         let packageURL = tempDir.appendingPathComponent(packageName)
         try? FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
         
@@ -244,7 +244,7 @@ final class TracePackageExporter {
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
     
-    /// Import a Trace package (.trace or .trace.zip) and restore the recording
+    /// Import a Trace package (.traceaudio or legacy .trace) and restore the recording
     @MainActor
     func importTracePackage(from url: URL, modelContext: ModelContext) async -> Bool {
         print("📦 Starting import from: \(url.path)")
@@ -274,15 +274,15 @@ final class TracePackageExporter {
                 let tempTrace = tempDir.appendingPathComponent(url.lastPathComponent)
                 try FileManager.default.copyItem(at: url, to: tempTrace)
                 packageDir = tempTrace
-                print("📦 Copied .trace directory to: \(tempTrace.path)")
+                print("📦 Copied .traceaudio directory to: \(tempTrace.path)")
             } catch {
-                print("❌ Failed to copy .trace directory: \(error)")
+                print("❌ Failed to copy .traceaudio directory: \(error)")
             }
         } else if exists && !isDirectory.boolValue {
-            // It's a flat file — could be a zip or a file-based .trace package
+            // It's a flat file — could be a zip or a file-based .traceaudio/.trace package
             // Try to unzip it first
             let ext = url.pathExtension.lowercased()
-            if ext == "zip" || ext == "trace" {
+            if ext == "zip" || ext == "traceaudio" || ext == "trace" {
                 // Try NSFileCoordinator to unzip
                 let coordinator = NSFileCoordinator()
                 var coordError: NSError?
@@ -302,13 +302,13 @@ final class TracePackageExporter {
                         print("📦 Copied as directory: \(tempTrace.path)")
                     } else {
                         // It's a flat file — look for metadata.json inside
-                        // Some systems (AirDrop, Files app) wrap .trace as a flat zip
+                        // Some systems (AirDrop, Files app) wrap .traceaudio as a flat zip
                         // The metadata.json might be directly inside
                         packageDir = tempTrace
                         print("📦 Copied as file, will try to read directly: \(tempTrace.path)")
                     }
                 } catch {
-                    print("❌ Failed to copy .trace file: \(error)")
+                    print("❌ Failed to copy .traceaudio file: \(error)")
                 }
             }
         } else {

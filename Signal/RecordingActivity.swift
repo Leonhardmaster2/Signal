@@ -11,12 +11,6 @@ struct RecordingActivityAttributes: ActivityAttributes {
         var timerStart: Date
         /// Frozen time to display when paused
         var pausedAt: TimeInterval
-        /// Audio level for waveform animation (0.0 to 1.0)
-        var audioLevel: Double
-        /// Update counter to force animation updates
-        var updateCount: Int
-        /// Pre-computed bar heights for waveform visualization (0.0 to 1.0 each)
-        var barLevels: [Double]
         /// Localized status text for "Recording" / "Paused" (passed from main app)
         var recordingStatusText: String
         var pausedStatusText: String

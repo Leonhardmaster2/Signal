@@ -9,9 +9,15 @@ struct OnboardingView: View {
     @State private var showCreditOffer = false
     @State private var creditOfferPrice: Double = 3.00
     @State private var hasShownCreditOffer = false
+    @State private var selectedUsageType: UserUsageType? = UserUsageType.saved
 
     /// Total pages: language (0) + usage (1) + 3 feature pages (2,3,4)
     private let totalPages = 5
+
+    /// Feature pages based on the selected usage type (or generic defaults)
+    private var featurePages: [UserUsageType.FeaturePage] {
+        (selectedUsageType ?? .personal).featurePages
+    }
 
     var body: some View {
         ZStack {
@@ -40,33 +46,19 @@ struct OnboardingView: View {
                         .tag(0)
 
                     // Page 1: Usage profile
-                    UsageProfilePage()
+                    UsageProfilePage(selectedUsageType: $selectedUsageType)
                         .tag(1)
 
-                    // Page 2-4: Feature pages
-                    OnboardingPageView(
-                        icon: "mic.fill",
-                        iconColor: .white,
-                        title: L10n.onboardingTitle1,
-                        subtitle: L10n.onboardingSubtitle1,
-                        highlight: L10n.onboardingHighlight1
-                    ).tag(2)
-
-                    OnboardingPageView(
-                        icon: "waveform.badge.magnifyingglass",
-                        iconColor: .white,
-                        title: L10n.onboardingTitle2,
-                        subtitle: L10n.onboardingSubtitle2,
-                        highlight: L10n.onboardingHighlight2
-                    ).tag(3)
-
-                    OnboardingPageView(
-                        icon: "brain",
-                        iconColor: .white,
-                        title: L10n.onboardingTitle3,
-                        subtitle: L10n.onboardingSubtitle3,
-                        highlight: L10n.onboardingHighlight3
-                    ).tag(4)
+                    // Page 2-4: Feature pages (dynamic based on usage selection)
+                    ForEach(Array(featurePages.enumerated()), id: \.offset) { index, page in
+                        OnboardingPageView(
+                            icon: page.icon,
+                            iconColor: .white,
+                            title: page.title,
+                            subtitle: page.subtitle,
+                            highlight: page.highlight
+                        ).tag(index + 2)
+                    }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -301,6 +293,167 @@ enum UserUsageType: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Context hint injected into Gemini system prompts
+    var promptContext: String {
+        switch self {
+        case .professional:
+            return "The user is a professional who primarily records work meetings, client calls, and team discussions. Focus on action items, decisions, and key takeaways. Use a clear, business-appropriate tone."
+        case .student:
+            return "The user is a student who primarily records lectures, study sessions, and academic discussions. Focus on key concepts, definitions, and learning points. Be educational and clear."
+        case .freelancer:
+            return "The user is a freelancer who records client calls, project briefs, and planning sessions. Focus on deliverables, deadlines, and client requirements."
+        case .journalist:
+            return "The user is a journalist who records interviews and research conversations. Focus on quotes, facts, claims, and attribution. Be precise about who said what."
+        case .researcher:
+            return "The user is a researcher who records field work, interviews, and data collection sessions. Focus on findings, methodology references, and data points."
+        case .personal:
+            return "The user records personal voice memos and notes. Keep summaries casual and friendly."
+        case .other:
+            return ""
+        }
+    }
+
+    /// Feature page content customized per usage type
+    struct FeaturePage {
+        let icon: String
+        let title: String
+        let subtitle: String
+        let highlight: String
+    }
+
+    /// Returns 3 feature pages tailored to this usage type
+    var featurePages: [FeaturePage] {
+        switch self {
+        case .professional:
+            return [
+                FeaturePage(
+                    icon: "mic.fill",
+                    title: L10n.onboardingTitle1,
+                    subtitle: "Capture every meeting, standup, and client call — hands-free. Never miss a decision again.",
+                    highlight: "Meeting recorder \u{2022} Always free"
+                ),
+                FeaturePage(
+                    icon: "person.2.fill",
+                    title: "Know Who\nSaid What",
+                    subtitle: "Automatic speaker identification labels each participant. Perfect for meeting minutes and follow-ups.",
+                    highlight: "Speaker identification \u{2022} AI-powered"
+                ),
+                FeaturePage(
+                    icon: "checklist",
+                    title: "Action Items\n& Summaries",
+                    subtitle: "AI extracts action items, key decisions, and follow-ups. Get meeting summaries in seconds, not hours.",
+                    highlight: "Upgrade for AI features"
+                ),
+            ]
+        case .student:
+            return [
+                FeaturePage(
+                    icon: "mic.fill",
+                    title: L10n.onboardingTitle1,
+                    subtitle: "Record every lecture, study group, and seminar. Review anything you missed, anytime.",
+                    highlight: "Lecture recorder \u{2022} Always free"
+                ),
+                FeaturePage(
+                    icon: "text.magnifyingglass",
+                    title: "Searchable\nLecture Notes",
+                    subtitle: "AI transcribes your lectures into searchable text. Find exactly what the professor said in seconds.",
+                    highlight: "AI transcription \u{2022} Fully searchable"
+                ),
+                FeaturePage(
+                    icon: "brain",
+                    title: "Study Smarter\nNot Harder",
+                    subtitle: "Get instant summaries of key concepts, definitions, and learning points from every lecture.",
+                    highlight: "Upgrade for AI features"
+                ),
+            ]
+        case .freelancer:
+            return [
+                FeaturePage(
+                    icon: "mic.fill",
+                    title: L10n.onboardingTitle1,
+                    subtitle: "Record client briefs, project calls, and planning sessions. Never lose a deliverable detail.",
+                    highlight: "Client call recorder \u{2022} Always free"
+                ),
+                FeaturePage(
+                    icon: "doc.text.fill",
+                    title: "Briefs to Text\nInstantly",
+                    subtitle: "AI turns your client calls into organized transcripts. Export to PDF or Markdown for your records.",
+                    highlight: "Transcription + Export"
+                ),
+                FeaturePage(
+                    icon: "checklist",
+                    title: "Track\nDeliverables",
+                    subtitle: "AI extracts deadlines, deliverables, and client requirements. Stay on top of every project.",
+                    highlight: "Upgrade for AI features"
+                ),
+            ]
+        case .journalist:
+            return [
+                FeaturePage(
+                    icon: "mic.fill",
+                    title: L10n.onboardingTitle1,
+                    subtitle: "Record interviews, press conferences, and field notes. Every quote captured perfectly.",
+                    highlight: "Interview recorder \u{2022} Always free"
+                ),
+                FeaturePage(
+                    icon: "quote.opening",
+                    title: "Perfect\nQuote Capture",
+                    subtitle: "AI transcribes with speaker labels so you always know who said what. Find exact quotes instantly.",
+                    highlight: "Speaker-labeled transcripts"
+                ),
+                FeaturePage(
+                    icon: "brain",
+                    title: "Smart\nInterview Notes",
+                    subtitle: "AI highlights key claims, facts, and quotes. Turn hours of interviews into organized story notes.",
+                    highlight: "Upgrade for AI features"
+                ),
+            ]
+        case .researcher:
+            return [
+                FeaturePage(
+                    icon: "mic.fill",
+                    title: L10n.onboardingTitle1,
+                    subtitle: "Record field interviews, experiments, and data collection sessions. Your research, preserved.",
+                    highlight: "Research recorder \u{2022} Always free"
+                ),
+                FeaturePage(
+                    icon: "waveform.badge.magnifyingglass",
+                    title: "Transcribe\n& Analyze",
+                    subtitle: "AI transcribes your recordings with timestamps. Search across all your sessions for patterns.",
+                    highlight: "Timestamped transcription"
+                ),
+                FeaturePage(
+                    icon: "brain",
+                    title: "AI Research\nAssistant",
+                    subtitle: "Get summaries highlighting findings, methodology notes, and key data points from each session.",
+                    highlight: "Upgrade for AI features"
+                ),
+            ]
+        case .personal, .other:
+            // Default/generic pages
+            return [
+                FeaturePage(
+                    icon: "mic.fill",
+                    title: L10n.onboardingTitle1,
+                    subtitle: L10n.onboardingSubtitle1,
+                    highlight: L10n.onboardingHighlight1
+                ),
+                FeaturePage(
+                    icon: "waveform.badge.magnifyingglass",
+                    title: L10n.onboardingTitle2,
+                    subtitle: L10n.onboardingSubtitle2,
+                    highlight: L10n.onboardingHighlight2
+                ),
+                FeaturePage(
+                    icon: "brain",
+                    title: L10n.onboardingTitle3,
+                    subtitle: L10n.onboardingSubtitle3,
+                    highlight: L10n.onboardingHighlight3
+                ),
+            ]
+        }
+    }
+
     /// Persist the user's selection
     static var saved: UserUsageType? {
         get {
@@ -316,7 +469,7 @@ enum UserUsageType: String, CaseIterable, Identifiable {
 // MARK: - Usage Profile Page
 
 struct UsageProfilePage: View {
-    @State private var selected: UserUsageType? = UserUsageType.saved
+    @Binding var selectedUsageType: UserUsageType?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -342,9 +495,9 @@ struct UsageProfilePage: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                     ForEach(UserUsageType.allCases) { usage in
-                        UsageCell(usage: usage, isSelected: selected == usage) {
+                        UsageCell(usage: usage, isSelected: selectedUsageType == usage) {
                             withAnimation(.easeOut(duration: 0.2)) {
-                                selected = usage
+                                selectedUsageType = usage
                                 UserUsageType.saved = usage
                             }
                         }

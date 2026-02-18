@@ -96,8 +96,6 @@ final class NotificationService {
         detectedLanguage: String? = nil,
         wasOnDevice: Bool = false
     ) {
-        // Only send notification if app is in background
-        guard UIApplication.shared.applicationState != .active else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "Transcription Complete"
@@ -135,8 +133,6 @@ final class NotificationService {
         recordingUID: UUID,
         errorMessage: String
     ) {
-        // Only send notification if app is in background
-        guard UIApplication.shared.applicationState != .active else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "Transcription Failed"
@@ -166,8 +162,6 @@ final class NotificationService {
         oneLiner: String? = nil,
         wasOnDevice: Bool = false
     ) {
-        // Only send notification if app is in background
-        guard UIApplication.shared.applicationState != .active else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "Summary Ready"
@@ -203,8 +197,6 @@ final class NotificationService {
         oneLiner: String? = nil,
         detectedLanguage: String? = nil
     ) {
-        // Only send notification if app is in background
-        guard UIApplication.shared.applicationState != .active else { return }
         
         let content = UNMutableNotificationContent()
         content.title = "✓ \(recordingTitle)"

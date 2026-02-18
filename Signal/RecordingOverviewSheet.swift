@@ -551,6 +551,7 @@ struct RecordingOverviewSheet: View {
         if let url = recording.audioURL {
             try? FileManager.default.removeItem(at: url)
         }
+        ChatPersistence.delete(for: recording.uid)
         modelContext.delete(recording)
         dismiss()
     }

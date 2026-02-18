@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import PDFKit
+import CoreText
 
 // MARK: - Audio File Importer
 
@@ -8,13 +9,9 @@ struct AudioFileImporter: ViewModifier {
     @Binding var isPresented: Bool
     let onImport: (URL) -> Void
     
-    // Define the trace package UTType
+    // Define the trace package UTType using exportedAs (our app owns this type)
     private var tracePackageType: UTType {
-        if let type = UTType("com.proceduralabs.trace.package") {
-            return type
-        }
-        // Fallback to treating as zip/archive
-        return .zip
+        UTType(exportedAs: "com.proceduralabs.trace.package")
     }
     
     func body(content: Content) -> some View {
@@ -34,12 +31,13 @@ struct AudioFileImporter: ViewModifier {
                         let hasAccess = url.startAccessingSecurityScopedResource()
                         print("📁 [Import] Security-scoped access: \(hasAccess)")
 
-                        // Check if it's a .trace package
-                        if url.pathExtension.lowercased() == "trace" ||
-                           (url.pathExtension.lowercased() == "zip" && url.lastPathComponent.contains(".trace.")) {
+                        // Check if it's a .traceaudio package (or legacy .trace)
+                        let ext = url.pathExtension.lowercased()
+                        if ext == "traceaudio" || ext == "trace" ||
+                           (ext == "zip" && url.lastPathComponent.contains(".traceaudio.")) {
                             print("📁 [Import] Detected Trace package, copying while access is active")
 
-                            // Copy the .trace package to temp while we still have security-scoped access
+                            // Copy the .traceaudio package to temp while we still have security-scoped access
                             let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
                             do {
                                 try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -49,10 +47,10 @@ struct AudioFileImporter: ViewModifier {
                                 // Release security-scoped access now that we've copied
                                 if hasAccess { url.stopAccessingSecurityScopedResource() }
 
-                                print("📁 [Import] Copied .trace package to temp: \(tempCopy.path)")
+                                print("📁 [Import] Copied .traceaudio package to temp: \(tempCopy.path)")
                                 onImport(tempCopy)
                             } catch {
-                                print("❌ [Import] Failed to copy .trace package: \(error)")
+                                print("❌ [Import] Failed to copy .traceaudio package: \(error)")
                                 if hasAccess { url.stopAccessingSecurityScopedResource() }
                             }
                             return
@@ -222,20 +220,20 @@ final class ExportService {
             .foregroundColor: UIColor.lightGray
         ]
 
-        /// Measure how tall a string will be when drawn in a rect of given width
-        func textHeight(_ text: String, attributes: [NSAttributedString.Key: Any], width: CGFloat) -> CGFloat {
-            let nsText = text as NSString
-            let rect = nsText.boundingRect(
-                with: CGSize(width: width, height: .greatestFiniteMagnitude),
-                options: [.usesLineFragmentOrigin, .usesFontLeading],
-                attributes: attributes,
-                context: nil
-            )
-            return ceil(rect.height)
-        }
-
         let data = renderer.pdfData { context in
             var yPosition: CGFloat = 0
+
+            /// Measure how tall a string will be when drawn in a rect of given width
+            func textHeight(_ text: String, attributes: [NSAttributedString.Key: Any], width: CGFloat) -> CGFloat {
+                let nsText = text as NSString
+                let rect = nsText.boundingRect(
+                    with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    attributes: attributes,
+                    context: nil
+                )
+                return ceil(rect.height)
+            }
 
             /// Start a new page and draw header/footer
             func newPage() {
@@ -286,6 +284,84 @@ final class ExportService {
                 }
             }
 
+            /// Available space remaining on the current page
+            func availableSpace() -> CGFloat {
+                pageRect.height - bottomMargin - yPosition
+            }
+
+            /// Draw a text block that may be split across pages if it's too tall.
+            /// Uses CoreText (CTFramesetter) to determine natural line-break points.
+            func drawTextBlock(_ text: String, attributes: [NSAttributedString.Key: Any], xOffset: CGFloat = 0, width: CGFloat? = nil) {
+                let drawWidth = (width ?? maxWidth) - xOffset
+                let fullHeight = textHeight(text, attributes: attributes, width: drawWidth)
+                let remaining = availableSpace()
+
+                // If it fits on the current page, draw normally
+                if fullHeight <= remaining {
+                    (text as NSString).draw(
+                        in: CGRect(x: margin + xOffset, y: yPosition, width: drawWidth, height: fullHeight),
+                        withAttributes: attributes
+                    )
+                    yPosition += fullHeight
+                    return
+                }
+
+                // Split across pages using CTFramesetter
+                let attrString = NSAttributedString(string: text, attributes: attributes)
+                let framesetter = CTFramesetterCreateWithAttributedString(attrString)
+                var startIndex = 0
+                let totalLength = attrString.length
+
+                while startIndex < totalLength {
+                    let space = availableSpace()
+
+                    // If barely any space left, start a new page
+                    if space < 30 {
+                        drawFooter()
+                        newPage()
+                        continue
+                    }
+
+                    // Ask CoreText how many characters fit in the remaining space
+                    let constraintSize = CGSize(width: drawWidth, height: space)
+                    var fitRange = CFRange(location: 0, length: 0)
+                    CTFramesetterSuggestFrameSizeWithConstraints(
+                        framesetter,
+                        CFRange(location: startIndex, length: totalLength - startIndex),
+                        nil,
+                        constraintSize,
+                        &fitRange
+                    )
+
+                    if fitRange.length <= 0 {
+                        // Safety: if CoreText says nothing fits, force a new page
+                        drawFooter()
+                        newPage()
+                        continue
+                    }
+
+                    // Extract the substring that fits and draw it
+                    let nsText = text as NSString
+                    let endIndex = startIndex + fitRange.length
+                    let chunk = nsText.substring(with: NSRange(location: startIndex, length: fitRange.length))
+                    let chunkHeight = textHeight(chunk, attributes: attributes, width: drawWidth)
+
+                    (chunk as NSString).draw(
+                        in: CGRect(x: margin + xOffset, y: yPosition, width: drawWidth, height: chunkHeight),
+                        withAttributes: attributes
+                    )
+                    yPosition += chunkHeight
+
+                    startIndex = endIndex
+
+                    // If there's more text, start a new page
+                    if startIndex < totalLength {
+                        drawFooter()
+                        newPage()
+                    }
+                }
+            }
+
             // --- First page ---
             newPage()
 
@@ -313,13 +389,8 @@ final class ExportService {
                 yPosition += 22
 
                 // One-liner
-                let oneLinerHeight = textHeight(summary.oneLiner, attributes: bodyAttributes, width: maxWidth)
-                ensureSpace(oneLinerHeight + 10)
-                (summary.oneLiner as NSString).draw(
-                    in: CGRect(x: margin, y: yPosition, width: maxWidth, height: oneLinerHeight),
-                    withAttributes: bodyAttributes
-                )
-                yPosition += oneLinerHeight + 15
+                drawTextBlock(summary.oneLiner, attributes: bodyAttributes)
+                yPosition += 15
 
                 // Context
                 if !summary.context.isEmpty {
@@ -327,13 +398,8 @@ final class ExportService {
                     ("Context" as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttributes)
                     yPosition += 22
 
-                    let contextHeight = textHeight(summary.context, attributes: bodyAttributes, width: maxWidth)
-                    ensureSpace(contextHeight + 10)
-                    (summary.context as NSString).draw(
-                        in: CGRect(x: margin, y: yPosition, width: maxWidth, height: contextHeight),
-                        withAttributes: bodyAttributes
-                    )
-                    yPosition += contextHeight + 15
+                    drawTextBlock(summary.context, attributes: bodyAttributes)
+                    yPosition += 15
                 }
 
                 // Action items
@@ -345,13 +411,8 @@ final class ExportService {
                     for action in summary.actionVectors {
                         let checkbox = action.isCompleted ? "\u{2611}" : "\u{2610}"
                         let actionText = "\(checkbox) \(action.assignee): \(action.task)"
-                        let actionHeight = textHeight(actionText, attributes: bodyAttributes, width: maxWidth - 10)
-                        ensureSpace(actionHeight + 6)
-                        (actionText as NSString).draw(
-                            in: CGRect(x: margin + 10, y: yPosition, width: maxWidth - 10, height: actionHeight),
-                            withAttributes: bodyAttributes
-                        )
-                        yPosition += actionHeight + 6
+                        drawTextBlock(actionText, attributes: bodyAttributes, xOffset: 10)
+                        yPosition += 6
                     }
                     yPosition += 10
                 }
@@ -385,14 +446,9 @@ final class ExportService {
                     )
                     yPosition += speakerHeight + 3
 
-                    // Segment text
-                    let segmentHeight = textHeight(segment.text, attributes: bodyAttributes, width: maxWidth - 10)
-                    ensureSpace(segmentHeight + 6)
-                    (segment.text as NSString).draw(
-                        in: CGRect(x: margin + 10, y: yPosition, width: maxWidth - 10, height: segmentHeight),
-                        withAttributes: bodyAttributes
-                    )
-                    yPosition += segmentHeight + 8
+                    // Segment text (splits across pages if needed)
+                    drawTextBlock(segment.text, attributes: bodyAttributes, xOffset: 10)
+                    yPosition += 8
 
                     previousSpeaker = speaker
                 }
@@ -404,13 +460,8 @@ final class ExportService {
                 ("Notes" as NSString).draw(at: CGPoint(x: margin, y: yPosition), withAttributes: headerAttributes)
                 yPosition += 22
 
-                let notesHeight = textHeight(notes, attributes: bodyAttributes, width: maxWidth)
-                ensureSpace(notesHeight + 10)
-                (notes as NSString).draw(
-                    in: CGRect(x: margin, y: yPosition, width: maxWidth, height: notesHeight),
-                    withAttributes: bodyAttributes
-                )
-                yPosition += notesHeight + 10
+                drawTextBlock(notes, attributes: bodyAttributes)
+                yPosition += 10
             }
 
             // Final footer

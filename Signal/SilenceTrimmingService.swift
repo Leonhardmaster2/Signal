@@ -514,8 +514,92 @@ final class SilenceTrimmingService {
         }
     }
     
+    // MARK: - Audio Compression for Upload
+
+    /// Re-encode audio at a lower sample rate and bitrate for efficient API upload.
+    /// Speech remains fully intelligible at 16kHz mono — most speech content is below 8kHz.
+    /// This typically reduces file size by 4-6x compared to the 44.1kHz high-quality original.
+    func compressForUpload(sourceURL: URL) async throws -> URL {
+        let outputFilename = "compressed_\(UUID().uuidString).m4a"
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(outputFilename)
+
+        let asset = AVAsset(url: sourceURL)
+        let assetTracks = try await asset.loadTracks(withMediaType: .audio)
+        guard let audioTrack = assetTracks.first else {
+            throw SilenceTrimmingError.invalidAudioFormat
+        }
+
+        // Configure AVAssetWriter with speech-optimized settings
+        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
+
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 16000.0,         // 16kHz — plenty for speech recognition
+            AVNumberOfChannelsKey: 1,          // Mono
+            AVEncoderBitRateKey: 32000,        // 32kbps — clear speech at minimal size
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue
+        ]
+
+        let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: outputSettings)
+        writerInput.expectsMediaDataInRealTime = false
+        writer.add(writerInput)
+
+        // Configure reader
+        let reader = try AVAssetReader(asset: asset)
+        let readerSettings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM),
+            AVSampleRateKey: 16000.0,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+
+        let readerOutput = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: readerSettings)
+        reader.add(readerOutput)
+
+        // Start reading and writing
+        guard reader.startReading() else {
+            throw SilenceTrimmingError.processingFailed("Failed to start reading: \(reader.error?.localizedDescription ?? "unknown")")
+        }
+        guard writer.startWriting() else {
+            throw SilenceTrimmingError.processingFailed("Failed to start writing: \(writer.error?.localizedDescription ?? "unknown")")
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        // Process in a background task
+        return try await withCheckedThrowingContinuation { continuation in
+            writerInput.requestMediaDataWhenReady(on: DispatchQueue(label: "com.trace.audioCompress")) {
+                while writerInput.isReadyForMoreMediaData {
+                    if let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+                        writerInput.append(sampleBuffer)
+                    } else {
+                        writerInput.markAsFinished()
+                        writer.finishWriting {
+                            if writer.status == .completed {
+                                // Log compression ratio
+                                if let sourceSize = try? FileManager.default.attributesOfItem(atPath: sourceURL.path)[.size] as? Int64,
+                                   let outputSize = try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64 {
+                                    let ratio = Double(sourceSize) / Double(max(outputSize, 1))
+                                    print("🗜️ [Compress] \(sourceSize / 1024)KB → \(outputSize / 1024)KB (\(String(format: "%.1f", ratio))x smaller)")
+                                }
+                                continuation.resume(returning: outputURL)
+                            } else {
+                                continuation.resume(throwing: SilenceTrimmingError.processingFailed(
+                                    "Compression failed: \(writer.error?.localizedDescription ?? "unknown")"
+                                ))
+                            }
+                        }
+                        return
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Cleanup
-    
+
     /// Remove temporary trimmed audio file
     func cleanupTrimmedFile(at url: URL) {
         // Only delete files in temporary directory

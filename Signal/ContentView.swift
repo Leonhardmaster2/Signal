@@ -174,9 +174,10 @@ struct AdaptiveSplitView: View {
     // MARK: - Audio Import
     
     private func importAudioFile(url: URL) {
-        // Check if it's a .trace package
-        if url.pathExtension.lowercased() == "trace" || 
-           (url.pathExtension.lowercased() == "zip" && url.lastPathComponent.contains(".trace.")) {
+        // Check if it's a .traceaudio package (or legacy .trace)
+        let ext = url.pathExtension.lowercased()
+        if ext == "traceaudio" || ext == "trace" ||
+           (ext == "zip" && url.lastPathComponent.contains(".traceaudio.")) {
             Task {
                 let success = await TracePackageExporter.shared.importTracePackage(
                     from: url,
@@ -485,6 +486,7 @@ struct AdaptiveSplitView: View {
         if let url = recording.audioURL {
             try? FileManager.default.removeItem(at: url)
         }
+        ChatPersistence.delete(for: recording.uid)
         modelContext.delete(recording)
         try? modelContext.save()
     }

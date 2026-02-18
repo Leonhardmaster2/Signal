@@ -94,6 +94,63 @@ private struct TimerView: View {
     }
 }
 
+// MARK: - Animated Waveform Bar (GPU-driven via KeyframeAnimator)
+
+/// A single bar that animates its height using KeyframeAnimator.
+/// The animation runs entirely on the render server — no extension wake-ups needed.
+private struct AnimatedWaveBar: View {
+    let index: Int
+    let barCount: Int
+    let maxHeight: CGFloat
+    let cornerRadius: CGFloat
+    let color: Color
+    let activeOpacity: Double
+    let pausedOpacity: Double
+    let isPaused: Bool
+
+    // Per-bar timing: use prime-ish multipliers so bars never sync up
+    private var seed: Double { Double(index) }
+    private var cycleDuration: Double {
+        let bases = [0.7, 0.85, 0.95, 1.1, 0.8, 1.0, 0.75, 0.9, 1.05, 0.65]
+        return bases[index % bases.count]
+    }
+
+    // Envelope: center bars are taller, edges are shorter (natural voice shape)
+    private var envelope: Double {
+        let normalizedPos = Double(index) / Double(max(barCount - 1, 1))
+        let centerDist = abs(normalizedPos - 0.5) * 2.0
+        return 1.0 - (centerDist * centerDist * 0.4)
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(color.opacity(isPaused ? pausedOpacity : activeOpacity))
+            .frame(height: isPaused ? max(2, maxHeight * 0.05) : nil)
+            .keyframeAnimator(
+                initialValue: AnimationValues(scale: 0.15),
+                repeating: !isPaused
+            ) { content, value in
+                content.frame(height: max(2, maxHeight * value.scale * envelope))
+            } keyframes: { _ in
+                KeyframeTrack(\.scale) {
+                    // 4-point cycle with unique heights per bar
+                    let h1 = 0.3 + sin(seed * 1.7) * 0.25
+                    let h2 = 0.8 + cos(seed * 2.3) * 0.2
+                    let h3 = 0.45 + sin(seed * 0.9) * 0.3
+                    let h4 = 0.65 + cos(seed * 1.4) * 0.25
+                    CubicKeyframe(h2, duration: cycleDuration * 0.28)
+                    CubicKeyframe(h1, duration: cycleDuration * 0.22)
+                    CubicKeyframe(h4, duration: cycleDuration * 0.3)
+                    CubicKeyframe(h3, duration: cycleDuration * 0.2)
+                }
+            }
+    }
+}
+
+private struct AnimationValues {
+    var scale: Double
+}
+
 // MARK: - Expanded Dynamic Island Waveform (30 bars)
 
 private struct ExpandedWaveform: View {
@@ -101,10 +158,10 @@ private struct ExpandedWaveform: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 2) {
-            let count = min(state.barLevels.count, 30)
-            ForEach(0..<count, id: \.self) { i in
-                WaveBar(
-                    level: state.isPaused ? 0.05 : state.barLevels[i],
+            ForEach(0..<30, id: \.self) { i in
+                AnimatedWaveBar(
+                    index: i,
+                    barCount: 30,
                     maxHeight: 60,
                     cornerRadius: 1.5,
                     color: .white,
@@ -125,16 +182,10 @@ private struct CompactWaveform: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 2) {
-            ForEach([6, 12, 18, 24], id: \.self) { i in
-                let level: Double = if state.isPaused {
-                    0.1
-                } else if i < state.barLevels.count {
-                    max(0.15, state.barLevels[i])
-                } else {
-                    0.3
-                }
-                WaveBar(
-                    level: level,
+            ForEach(0..<4, id: \.self) { i in
+                AnimatedWaveBar(
+                    index: i * 7, // spread across the seed space for variety
+                    barCount: 4,
                     maxHeight: 12,
                     cornerRadius: 1.5,
                     color: .white,
@@ -198,11 +249,10 @@ private struct LockScreenWaveform: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 1.5) {
-            let count = min(state.barLevels.count / 2, 15)
-            ForEach(0..<count, id: \.self) { i in
-                let index = i * 2
-                WaveBar(
-                    level: state.isPaused ? 0.05 : (index < state.barLevels.count ? state.barLevels[index] : 0.05),
+            ForEach(0..<15, id: \.self) { i in
+                AnimatedWaveBar(
+                    index: i * 2, // spread seeds for visual variety
+                    barCount: 15,
                     maxHeight: 36,
                     cornerRadius: 1,
                     color: .red,
@@ -213,24 +263,6 @@ private struct LockScreenWaveform: View {
             }
         }
         .frame(height: 36)
-    }
-}
-
-// MARK: - Single Bar (ultra-lightweight, no animation modifiers)
-
-private struct WaveBar: View {
-    let level: Double
-    let maxHeight: CGFloat
-    let cornerRadius: CGFloat
-    let color: Color
-    let activeOpacity: Double
-    let pausedOpacity: Double
-    let isPaused: Bool
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(color.opacity(isPaused ? pausedOpacity : activeOpacity))
-            .frame(height: max(2, maxHeight * level))
     }
 }
 

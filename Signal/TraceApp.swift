@@ -54,7 +54,7 @@ struct TraceApp: App {
         let ext = url.pathExtension.lowercased()
         
         // Check if it's a Trace package
-        if ext == "trace" || (ext == "zip" && url.lastPathComponent.contains(".trace.")) {
+        if ext == "traceaudio" || ext == "trace" || (ext == "zip" && url.lastPathComponent.contains(".traceaudio.")) {
             Task { @MainActor in
                 let success = await TracePackageExporter.shared.importTracePackage(
                     from: url,
@@ -144,12 +144,9 @@ struct TraceApp: App {
         if !AudioRecorder.shared.isRecording {
             for activity in Activity<RecordingActivityAttributes>.activities {
                 let finalState = RecordingActivityAttributes.ContentState(
-                    isPaused: false,
+                    isPaused: true,
                     timerStart: Date(),
                     pausedAt: 0,
-                    audioLevel: 0.0,
-                    updateCount: 0,
-                    barLevels: Array(repeating: 0.05, count: 30),
                     recordingStatusText: L10n.recordingLive,
                     pausedStatusText: L10n.pausedLive
                 )

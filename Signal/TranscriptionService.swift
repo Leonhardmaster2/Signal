@@ -39,6 +39,14 @@ final class TranscriptionService {
     /// Active cloud URLSession task for cancellation
     private var activeURLTask: URLSessionTask?
 
+    /// Custom URLSession with extended timeouts for long audio uploads
+    private lazy var uploadSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 300  // 5 minutes for the request
+        config.timeoutIntervalForResource = 600 // 10 minutes total
+        return URLSession(configuration: config)
+    }()
+
     /// Whether a transcription is currently in progress
     var isTranscribing: Bool {
         activeURLTask != nil || OnDeviceTranscriptionService.shared.isTranscribing
@@ -126,12 +134,12 @@ final class TranscriptionService {
         request.setValue("multipart/form-data; boundary=\(body.1)", forHTTPHeaderField: "Content-Type")
         request.httpBody = body.0
 
-        // Use delegate-based task so we can cancel it
+        // Use custom session with extended timeouts for large audio files
         let (data, response): (Data, URLResponse)
         do {
-            let task = URLSession.shared.dataTask(with: request)
+            let task = uploadSession.dataTask(with: request)
             activeURLTask = task
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await uploadSession.data(for: request)
             activeURLTask = nil
         } catch {
             activeURLTask = nil
@@ -288,13 +296,30 @@ final class TranscriptionService {
             }
         }
         
+        // Compress audio for upload (downsample to 16kHz, low bitrate) — all cloud users
+        var compressedURL: URL? = nil
+        if !useOnDeviceForThis {
+            print("🗜️ [TranscriptionService] Compressing audio for upload...")
+            do {
+                let compressed = try await SilenceTrimmingService.shared.compressForUpload(sourceURL: audioURLToTranscribe)
+                compressedURL = compressed
+                audioURLToTranscribe = compressed
+                print("🗜️ [TranscriptionService] Using compressed audio: \(compressed.lastPathComponent)")
+            } catch {
+                print("⚠️ [TranscriptionService] Compression failed, continuing with uncompressed audio: \(error.localizedDescription)")
+            }
+        }
+
         defer {
-            // Cleanup temporary trimmed file
+            // Cleanup temporary files
             if let url = trimmedURL {
                 SilenceTrimmingService.shared.cleanupTrimmedFile(at: url)
             }
+            if let url = compressedURL {
+                SilenceTrimmingService.shared.cleanupTrimmedFile(at: url)
+            }
         }
-        
+
         if useOnDeviceForThis {
             print("✅ [TranscriptionService] Using ON-DEVICE transcription")
             // Use on-device transcription (no silence trimming needed - it's free)

@@ -208,11 +208,12 @@ final class SummarizationService {
         }
         
         let currentDate = Date().formatted(date: .long, time: .omitted)
+        let usageContext = UserUsageType.saved?.promptContext ?? ""
         var prompt = """
         You are a precise meeting summarizer. Analyze the following meeting transcript and produce a JSON summary with source citations.
 
         Today's date is \(currentDate). Use this as your reference for the current date and year when interpreting relative dates (e.g. "tomorrow", "next Friday", "by end of month").
-
+        \(usageContext.isEmpty ? "" : "\n\(usageContext)\n")
         Rules:
         - "oneLiner": A single concise sentence (max 20 words) capturing the core outcome or decision.
         - "context": 2-4 sentences providing essential background, key discussion points, and conclusions. When making claims, cite the source timestamp in square brackets [MM:SS].
