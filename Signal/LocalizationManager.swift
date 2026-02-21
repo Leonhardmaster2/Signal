@@ -290,6 +290,10 @@ enum L10n {
 
     // MARK: - Settings
     static var subscription: String { t("subscription") }
+    static var appearance: String { t("appearance") }
+    static var appearanceSystem: String { t("appearance_system") }
+    static var appearanceDark: String { t("appearance_dark") }
+    static var appearanceLight: String { t("appearance_light") }
     static var recordingSection: String { t("recording_section") }
     static var autoTranscribe: String { t("auto_transcribe") }
     static var quality: String { t("quality") }

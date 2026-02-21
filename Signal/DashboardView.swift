@@ -6,6 +6,7 @@ import AVFoundation
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @Query(filter: #Predicate<Recording> { !$0.isArchived }, sort: \Recording.date, order: .reverse)
     private var recordings: [Recording]
 
@@ -19,6 +20,10 @@ struct DashboardView: View {
     @State private var showPaywall = false
     @State private var recordingToRename: Recording?
     @State private var renameText = ""
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     // MARK: - Computed
 
@@ -84,14 +89,10 @@ struct DashboardView: View {
 
             recordButton
         }
-        .background(Color.black.ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .background(colors.background.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("TRACE")
-                    .font(AppFont.mono(size: 13, weight: .semibold))
-                    .kerning(4.0)
-                    .foregroundStyle(.white)
+                AppLogo(height: 18)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -99,11 +100,11 @@ struct DashboardView: View {
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(colors.primaryText.opacity(0.7))
                 }
             }
         }
-        .toolbarBackground(Color.black, for: .navigationBar)
+        .toolbarBackground(colors.toolbarBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .navigationDestination(isPresented: Binding(
             get: { selectedRecording != nil },
@@ -208,11 +209,11 @@ struct DashboardView: View {
                 VStack(spacing: 8) {
                     Text(L10n.noRecordings)
                         .font(AppFont.mono(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
 
                     Text(L10n.tapToRecord)
                         .font(AppFont.mono(size: 13, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
@@ -260,11 +261,11 @@ struct DashboardView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.muted)
+                .foregroundStyle(colors.mutedText)
 
             TextField(L10n.searchRecordings, text: $searchText)
                 .font(AppFont.mono(size: 13, weight: .regular))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
 
@@ -274,7 +275,7 @@ struct DashboardView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color.muted)
+                        .foregroundStyle(colors.mutedText)
                 }
             }
         }
@@ -301,18 +302,18 @@ struct DashboardView: View {
         VStack(spacing: 3) {
             Text(value)
                 .font(AppFont.mono(size: 20, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
 
             Text(label)
                 .font(AppFont.mono(size: 9, weight: .medium))
                 .kerning(1.0)
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var statDivider: some View {
-        Rectangle().fill(Color.divider).frame(width: 0.5, height: 32)
+        Rectangle().fill(colors.divider).frame(width: 0.5, height: 32)
     }
 
     // MARK: - Date Section
@@ -336,7 +337,7 @@ struct DashboardView: View {
 
                     if recording.uid != recordings.last?.uid {
                         Rectangle()
-                            .fill(Color.divider)
+                            .fill(colors.divider)
                             .frame(height: 0.5)
                             .padding(.horizontal, AppLayout.cardPadding)
                     }
@@ -361,7 +362,7 @@ struct DashboardView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.down")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colorScheme == .dark ? .white : .black)
                         .frame(width: 48, height: 48)
                         .glassEffect(.regular.interactive(), in: .circle)
                 }
@@ -372,13 +373,13 @@ struct DashboardView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Circle()
-                            .fill(Color.white)
+                            .fill(colorScheme == .dark ? Color.white : Color.black)
                             .frame(width: 10, height: 10)
 
                         Text(L10n.record)
                             .font(AppFont.mono(size: 13, weight: .bold))
                             .kerning(2.0)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colorScheme == .dark ? .white : .black)
                     }
                     .padding(.horizontal, 28)
                     .padding(.vertical, 16)
@@ -403,11 +404,11 @@ struct DashboardView: View {
                     Text("\(hiddenRecordingsCount) \(L10n.olderRecordingsHidden)")
                         .font(AppFont.mono(size: 12, weight: .medium))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 
                 Text(L10n.upgradeUnlimitedHistory)
                     .font(AppFont.mono(size: 10, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
@@ -513,9 +514,14 @@ struct DashboardView: View {
 // MARK: - Trace Row
 
 struct TraceRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let recording: Recording
     var onRequestDelete: (() -> Void)?
     var onRequestRename: (() -> Void)?
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -523,12 +529,12 @@ struct TraceRow: View {
                 if recording.isStarred {
                     Image(systemName: "star.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
 
                 Text(recording.title)
                     .font(AppFont.mono(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .lineLimit(1)
 
                 Spacer()
@@ -555,7 +561,7 @@ struct TraceRow: View {
                         Text("\(recording.uniqueSpeakers.count)")
                             .font(AppFont.mono(size: 11, weight: .regular))
                     }
-                    .foregroundStyle(Color.muted)
+                    .foregroundStyle(colors.mutedText)
                 }
 
                 Spacer()
@@ -563,7 +569,7 @@ struct TraceRow: View {
                 if recording.isTranscribing {
                     ProgressView()
                         .scaleEffect(0.6)
-                        .tint(.white)
+                        .tint(colors.primaryText)
                 }
             }
         }
@@ -602,7 +608,7 @@ struct TraceRow: View {
             } label: {
                 Image(systemName: recording.isStarred ? "star.slash.fill" : "star.fill")
             }
-            .tint(.white)
+            .tint(colors.primaryText)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
@@ -616,7 +622,7 @@ struct TraceRow: View {
             } label: {
                 Image(systemName: "archivebox.fill")
             }
-            .tint(Color.white.opacity(0.3))
+            .tint(colors.primaryText.opacity(0.3))
         }
     }
 
@@ -628,17 +634,17 @@ struct TraceRow: View {
         Text(label)
             .font(AppFont.mono(size: 9, weight: .bold))
             .kerning(1.0)
-            .foregroundStyle(isActive ? .white : .gray)
+            .foregroundStyle(isActive ? colors.primaryText : colors.secondaryText)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(isActive ? Color.white.opacity(0.15) : Color.clear)
+            .background(isActive ? colors.selection : Color.clear)
             .clipShape(Capsule())
     }
 
     private func metaLabel(_ text: String) -> some View {
         Text(text)
             .font(AppFont.mono(size: 11, weight: .regular))
-            .foregroundStyle(Color.muted)
+            .foregroundStyle(colors.mutedText)
     }
 }
 
@@ -653,8 +659,13 @@ extension Recording {
 // MARK: - Frequency Bar
 
 struct FrequencyBar: View {
+    @Environment(\.colorScheme) private var colorScheme
     let samples: [Float]
     let height: CGFloat
+    
+    private var barColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
 
     var body: some View {
         Canvas { context, size in
@@ -671,7 +682,7 @@ struct FrequencyBar: View {
 
                 let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
                 let path = Path(roundedRect: rect, cornerRadius: 1)
-                context.fill(path, with: .color(.white.opacity(opacity)))
+                context.fill(path, with: .color(barColor.opacity(opacity)))
             }
         }
         .frame(height: height)
@@ -681,7 +692,12 @@ struct FrequencyBar: View {
 // MARK: - Idle Waveform
 
 struct IdleWaveform: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var phase: CGFloat = 0
+    
+    private var waveColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
 
     var body: some View {
         Canvas { context, size in
@@ -694,7 +710,7 @@ struct IdleWaveform: View {
                 if x == 0 { path.move(to: CGPoint(x: x, y: y)) }
                 else { path.addLine(to: CGPoint(x: x, y: y)) }
             }
-            context.stroke(path, with: .color(.white.opacity(0.15)), lineWidth: 1.5)
+            context.stroke(path, with: .color(waveColor.opacity(0.15)), lineWidth: 1.5)
         }
         .onAppear {
             withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) {

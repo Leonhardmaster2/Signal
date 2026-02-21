@@ -294,3 +294,62 @@ final class ChatService {
         return String(format: "%d:%02d", mins, secs)
     }
 }
+// MARK: - Preview
+
+#if DEBUG
+import SwiftUI
+
+@available(iOS 17.0, macOS 14.0, *)
+#Preview("Chat Messages") {
+    VStack(spacing: 16) {
+        ForEach(ChatService.previewMessages) { message in
+            HStack {
+                if message.role == .user {
+                    Spacer()
+                }
+                
+                VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+                    Text(message.content)
+                        .padding(12)
+                        .background(
+                            message.role == .user 
+                                ? Color.blue.opacity(0.2)
+                                : Color.gray.opacity(0.2)
+                        )
+                        .cornerRadius(12)
+                        .frame(maxWidth: 300, alignment: message.role == .user ? .trailing : .leading)
+                    
+                    Text(message.timestamp.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                
+                if message.role == .model {
+                    Spacer()
+                }
+            }
+        }
+    }
+    .padding()
+}
+
+extension ChatService {
+    static var previewMessages: [ChatMessage] {
+        [
+            ChatMessage(role: .user, content: "What were the main topics discussed?"),
+            ChatMessage(role: .model, content: "Based on the transcript, the meeting covered **four key areas**:\n\n1. **Q1 Product Launch Timeline** at [2:15] - Sarah outlined the revised schedule with a target launch date of March 15th\n2. **Marketing Budget Reallocation** at [8:42] - Discussion about shifting $50K from print to digital channels\n3. **Engineering Resource Gaps** at [15:30] - James raised concerns about backend infrastructure capacity\n4. **Customer Feedback Integration** at [22:10] - Review of the recent user survey results showing 87% satisfaction\n\nThe team agreed to reconvene next Tuesday to finalize the launch strategy."),
+            
+            ChatMessage(role: .user, content: "Can you draft an email to the team summarizing the action items?"),
+            ChatMessage(role: .model, content: "Here's a summary email you can send:\n\n**To:** team@company.com\n**Subject:** Action Items from Q1 Planning Meeting - Feb 20, 2026\n\n**Hi Team,**\n\nGreat discussion today! Here are our key action items:\n\n**Sarah** - Finalize product launch timeline and share revised milestones by EOD Friday [2:45]\n\n**James** - Conduct infrastructure capacity assessment and propose scaling solutions by Monday [16:15]\n\n**Marketing Team** - Present detailed digital campaign strategy with budget breakdown at Tuesday's follow-up meeting [10:20]\n\n**Everyone** - Review the customer feedback report (link in Slack) before our next session [23:05]\n\n**Next Meeting:** Tuesday, Feb 25 at 2pm\n\nLet me know if I missed anything!\n\nBest,\n[Your name]"),
+            
+            ChatMessage(role: .user, content: "What reminders should I set?"),
+            ChatMessage(role: .model, content: "Based on the meeting, here are the **key reminders** you should set:\n\n**Urgent (This Week):**\n• Review customer feedback report - **Due: Friday, Feb 21** at [23:05]\n• Follow up with Sarah on launch timeline - **Due: Friday, Feb 21** at [2:45]\n• Check James's infrastructure assessment - **Due: Monday, Feb 24** at [16:15]\n\n**Upcoming:**\n• Prepare questions for Tuesday planning meeting - **Due: Monday, Feb 24**\n• Review digital marketing budget proposal - **Due: Tuesday, Feb 25** before 2pm meeting at [10:20]\n\nWould you like me to help you prioritize these?"),
+            
+            ChatMessage(role: .user, content: "Add the follow-up meeting to my calendar"),
+            ChatMessage(role: .model, content: "Here are the **calendar events** from this meeting:\n\n**Primary Event:**\n📅 **Q1 Planning Follow-up Meeting**\n• **Date:** Tuesday, February 25, 2026\n• **Time:** 2:00 PM - 3:30 PM\n• **Location:** Conference Room B / Zoom\n• **Attendees:** Sarah, James, Marketing Team\n• **Agenda:** Finalize product launch strategy, review infrastructure proposal, discuss digital campaign budget\n• **Mentioned at:** [22:45]\n\n**Related Deadline:**\n📅 **Product Launch Date**\n• **Date:** Monday, March 15, 2026\n• **Type:** All-day milestone\n• **Note:** Target release for Q1 product at [2:30]\n\nYou can copy these details to add them to your calendar app!")
+        ]
+    }
+}
+
+#endif
+

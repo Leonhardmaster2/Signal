@@ -4,8 +4,13 @@ import StoreKit
 // MARK: - Subscription Overview (For Settings)
 
 struct SubscriptionOverviewView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var subscription = SubscriptionManager.shared
     @State private var showPaywall = false
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -37,7 +42,7 @@ struct SubscriptionOverviewView: View {
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 12))
                 }
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
             }
         }
         .sheet(isPresented: $showPaywall) {
@@ -51,18 +56,18 @@ struct SubscriptionOverviewView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(subscription.currentTier.displayName.uppercased())
                         .font(AppFont.mono(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     Text(subscription.currentTier.tagline)
                         .font(AppFont.mono(size: 12, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
                 
                 Spacer()
                 
                 Text(subscription.currentTier.monthlyPrice)
                     .font(AppFont.mono(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
             }
             
             // Feature highlights
@@ -82,10 +87,10 @@ struct SubscriptionOverviewView: View {
             Text(text)
                 .font(AppFont.mono(size: 10, weight: .medium))
         }
-        .foregroundStyle(.gray)
+        .foregroundStyle(colors.secondaryText)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white.opacity(0.05))
+        .background(colors.selection)
         .clipShape(Capsule())
     }
     
@@ -97,7 +102,7 @@ struct SubscriptionOverviewView: View {
                     Text(L10n.transcriptionSection)
                         .font(AppFont.mono(size: 10, weight: .medium))
                         .kerning(1.5)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                     
                     Spacer()
                 }
@@ -105,16 +110,16 @@ struct SubscriptionOverviewView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "waveform")
                         .font(.system(size: 20))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(colors.mutedText)
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L10n.freeMinPerMonth("15"))
                             .font(AppFont.mono(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                         
                         Text(L10n.upgradeForAI())
                             .font(AppFont.mono(size: 11, weight: .regular))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                             .lineSpacing(2)
                     }
                 }
@@ -124,13 +129,13 @@ struct SubscriptionOverviewView: View {
                     Text(L10n.thisMonthUsage)
                         .font(AppFont.mono(size: 10, weight: .medium))
                         .kerning(1.5)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                     
                     Spacer()
                     
                     Text(L10n.resets(in: subscription.daysUntilReset))
                         .font(AppFont.mono(size: 10, weight: .regular))
-                        .foregroundStyle(.gray.opacity(0.7))
+                        .foregroundStyle(colors.mutedText)
                 }
                 
                 // Progress bar
@@ -139,7 +144,7 @@ struct SubscriptionOverviewView: View {
                         ZStack(alignment: .leading) {
                             // Background
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(colors.selection)
                                 .frame(height: 8)
                             
                             // Progress
@@ -153,11 +158,11 @@ struct SubscriptionOverviewView: View {
                     HStack {
                         Text(formatUsedTime(subscription.usage.transcriptionSecondsUsed))
                             .font(AppFont.mono(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                         
                         Text(L10n.ofTotal("", formatUsedTime(subscription.currentTier.transcriptionLimitSeconds)))
                             .font(AppFont.mono(size: 12, weight: .regular))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                         
                         Spacer()
                         
@@ -179,7 +184,7 @@ struct SubscriptionOverviewView: View {
         } else if percentage >= 0.7 {
             return .orange
         } else {
-            return .white
+            return colors.primaryText
         }
     }
     
@@ -203,10 +208,10 @@ struct SubscriptionOverviewView: View {
                     .font(AppFont.mono(size: 12, weight: .bold))
                     .kerning(1.5)
             }
-            .foregroundStyle(.black)
+            .foregroundStyle(colors.background)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(Color.white)
+            .background(colors.primaryText)
             .clipShape(Capsule())
         }
     }
@@ -215,12 +220,17 @@ struct SubscriptionOverviewView: View {
 // MARK: - Paywall View
 
 struct PaywallView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var subscription = SubscriptionManager.shared
     @State private var selectedTier: SubscriptionTier = .standardMonthly
     @State private var isYearly = false
     @State private var isPurchasing = false
     @State private var errorMessage: String?
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     var body: some View {
         NavigationStack {
@@ -231,11 +241,11 @@ struct PaywallView: View {
                         Text(L10n.unlockSignal)
                             .font(AppFont.mono(size: 24, weight: .bold))
                             .kerning(3.0)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                         
                         Text(L10n.choosePlan)
                             .font(AppFont.mono(size: 14, weight: .regular))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                     .padding(.top, 20)
                     
@@ -325,7 +335,7 @@ struct PaywallView: View {
                     } label: {
                         Text(L10n.restorePurchases)
                             .font(AppFont.mono(size: 12, weight: .medium))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                     .padding(.bottom, 20)
                     
@@ -335,8 +345,7 @@ struct PaywallView: View {
                         .padding(.bottom, 40)
                 }
             }
-            .background(Color.black.ignoresSafeArea())
-            .preferredColorScheme(.dark)
+            .background(colors.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -344,7 +353,7 @@ struct PaywallView: View {
                         dismiss()
                     }
                     .font(AppFont.mono(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                 }
             }
         }
@@ -355,19 +364,19 @@ struct PaywallView: View {
             Text(L10n.whatsIncluded)
                 .font(AppFont.mono(size: 10, weight: .medium))
                 .kerning(1.5)
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
             
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(selectedTier.features) { feature in
                     HStack(spacing: 12) {
                         Image(systemName: feature.icon)
                             .font(.system(size: 14))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                             .frame(width: 24)
                         
                         Text(feature.text)
                             .font(AppFont.mono(size: 13, weight: .regular))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                     }
                 }
             }
@@ -384,7 +393,7 @@ struct PaywallView: View {
             HStack {
                 if isPurchasing {
                     ProgressView()
-                        .tint(.black)
+                        .tint(colors.background)
                         .scaleEffect(0.8)
                 } else {
                     Text(L10n.subscribeTo(selectedTier.displayName.uppercased()))
@@ -392,10 +401,10 @@ struct PaywallView: View {
                         .kerning(1.5)
                 }
             }
-            .foregroundStyle(.black)
+            .foregroundStyle(colors.background)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(Color.white)
+            .background(colors.primaryText)
             .clipShape(Capsule())
         }
         .disabled(isPurchasing)
@@ -404,7 +413,7 @@ struct PaywallView: View {
     private var termsText: some View {
         Text(L10n.appleTerms)
             .font(AppFont.mono(size: 9, weight: .regular))
-            .foregroundStyle(.gray.opacity(0.7))
+            .foregroundStyle(colors.mutedText)
             .multilineTextAlignment(.center)
             .lineSpacing(3)
     }
@@ -420,7 +429,7 @@ struct PaywallView: View {
                     Text(L10n.monthly.uppercased())
                         .font(AppFont.mono(size: 11, weight: .bold))
                         .kerning(1.5)
-                        .foregroundStyle(isYearly ? .white.opacity(0.6) : .white)
+                        .foregroundStyle(isYearly ? colors.mutedText : colors.primaryText)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
@@ -435,7 +444,7 @@ struct PaywallView: View {
                     Text(L10n.yearly.uppercased())
                         .font(AppFont.mono(size: 11, weight: .bold))
                         .kerning(1.5)
-                        .foregroundStyle(isYearly ? .white : .white.opacity(0.6))
+                        .foregroundStyle(isYearly ? colors.primaryText : colors.mutedText)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                 }
@@ -450,7 +459,7 @@ struct PaywallView: View {
             Text(L10n.oneTimePurchaseSection)
                 .font(AppFont.mono(size: 10, weight: .medium))
                 .kerning(1.5)
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
             
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top) {
@@ -463,11 +472,11 @@ struct PaywallView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(L10n.privacyPack)
                                     .font(AppFont.mono(size: 14, weight: .bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 
                                 Text(L10n.transcribeOnPhone)
                                     .font(AppFont.mono(size: 11))
-                                    .foregroundStyle(.gray)
+                                    .foregroundStyle(colors.secondaryText)
                             }
                         }
                         
@@ -479,7 +488,7 @@ struct PaywallView: View {
                                     .foregroundStyle(.green)
                                 Text(L10n.twoHoursCloud)
                                     .font(AppFont.mono(size: 12))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                             }
                             
                             // Only show on-device features if device supports it
@@ -490,7 +499,7 @@ struct PaywallView: View {
                                         .foregroundStyle(.green)
                                     Text(L10n.unlimitedOnDevice)
                                         .font(AppFont.mono(size: 12))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                 }
                                 
                                 HStack(spacing: 8) {
@@ -499,7 +508,7 @@ struct PaywallView: View {
                                         .foregroundStyle(.green)
                                     Text(L10n.privateAISummaries)
                                         .font(AppFont.mono(size: 12))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                 }
                             }
                         }
@@ -510,7 +519,7 @@ struct PaywallView: View {
                     
                     Text(L10n.pricePrivacyPack)
                         .font(AppFont.mono(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
                 
                 Button {
@@ -519,7 +528,7 @@ struct PaywallView: View {
                     HStack {
                         if isPurchasing {
                             ProgressView()
-                                .tint(.black)
+                                .tint(colors.background)
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "cart.fill")
@@ -529,7 +538,7 @@ struct PaywallView: View {
                                 .kerning(1.5)
                         }
                     }
-                    .foregroundStyle(.black)
+                    .foregroundStyle(colors.background)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Color.green)
@@ -586,10 +595,15 @@ struct PaywallView: View {
 // MARK: - Tier Card
 
 struct TierCard: View {
+    @Environment(\.colorScheme) private var colorScheme
     let tier: SubscriptionTier
     let isSelected: Bool
     let isCurrent: Bool
     let onSelect: () -> Void
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     var body: some View {
         Button(action: {
@@ -602,32 +616,32 @@ struct TierCard: View {
                     HStack(spacing: 8) {
                         Text(tier.displayName.uppercased())
                             .font(AppFont.mono(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                         
                         if isCurrent {
                             Text(L10n.current)
                                 .font(AppFont.mono(size: 8, weight: .bold))
                                 .kerning(1.0)
-                                .foregroundStyle(.black)
+                                .foregroundStyle(colors.background)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .glassEffect(.regular.tint(.white), in: Capsule())
+                                .glassEffect(.regular.tint(colors.primaryText), in: Capsule())
                         }
                         
                         if tier.baseLevel == .standard && !isCurrent {
                             Text(L10n.popular)
                                 .font(AppFont.mono(size: 8, weight: .bold))
                                 .kerning(1.0)
-                                .foregroundStyle(.black)
+                                .foregroundStyle(colors.background)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .glassEffect(.regular.tint(.white.opacity(0.8)), in: Capsule())
+                                .glassEffect(.regular.tint(colors.primaryText.opacity(0.8)), in: Capsule())
                         }
                     }
                     
                     Text(tier.tagline)
                         .font(AppFont.mono(size: 11, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
                 
                 Spacer()
@@ -636,36 +650,36 @@ struct TierCard: View {
                     if tier.isYearly {
                         Text(tier.pricePerMonth)
                             .font(AppFont.mono(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                         
                         Text(tier.monthlyPrice)
                             .font(AppFont.mono(size: 9, weight: .medium))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                         
                         Text(L10n.billedYearly)
                             .font(AppFont.mono(size: 8, weight: .regular))
-                            .foregroundStyle(.gray.opacity(0.7))
+                            .foregroundStyle(colors.mutedText)
                     } else {
                         Text(tier.monthlyPrice)
                             .font(AppFont.mono(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                         
                         Text(tier.transcriptionLimitLabel)
                             .font(AppFont.mono(size: 10, weight: .regular))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                 }
                 
                 // Selection indicator
                 Circle()
-                    .stroke(isSelected ? Color.white : Color.white.opacity(0.3), lineWidth: 2)
-                    .background(Circle().fill(isSelected ? Color.white : Color.clear))
+                    .stroke(isSelected ? colors.primaryText : colors.mutedText, lineWidth: 2)
+                    .background(Circle().fill(isSelected ? colors.primaryText : Color.clear))
                     .frame(width: 20, height: 20)
                     .overlay {
                         if isSelected {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.black)
+                                .foregroundStyle(colors.background)
                         }
                     }
                     .padding(.leading, 12)
@@ -674,7 +688,7 @@ struct TierCard: View {
         }
         .buttonStyle(.plain)
         .glassEffect(
-            isSelected ? .regular.tint(.white.opacity(0.15)).interactive() : .regular.interactive(),
+            isSelected ? .regular.tint(colors.selection).interactive() : .regular.interactive(),
             in: RoundedRectangle(cornerRadius: 12)
         )
     }
@@ -683,23 +697,28 @@ struct TierCard: View {
 // MARK: - Upgrade Prompt (Inline)
 
 struct UpgradePromptView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let reason: UpgradeReason
     let onUpgrade: () -> Void
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: reason.icon)
                 .font(.system(size: 32, weight: .thin))
-                .foregroundStyle(Color.muted)
+                .foregroundStyle(colors.mutedText)
             
             VStack(spacing: 8) {
                 Text(reason.title)
                     .font(AppFont.mono(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                 
                 Text(reason.message)
                     .font(AppFont.mono(size: 12, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
             }
@@ -712,10 +731,10 @@ struct UpgradePromptView: View {
                         .font(AppFont.mono(size: 11, weight: .bold))
                         .kerning(1.5)
                 }
-                .foregroundStyle(.black)
+                .foregroundStyle(colors.background)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
-                .background(Color.white)
+                .background(colors.primaryText)
                 .clipShape(Capsule())
             }
         }
@@ -766,7 +785,12 @@ enum UpgradeReason {
 // MARK: - Usage Badge (For Dashboard)
 
 struct UsageBadgeView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var subscription = SubscriptionManager.shared
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     var body: some View {
         HStack(spacing: 8) {
@@ -774,24 +798,24 @@ struct UsageBadgeView: View {
                 // Free tier - show lock icon
                 Image(systemName: "lock.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(colors.mutedText)
                     .frame(width: 24, height: 24)
                 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.free.uppercased())
                         .font(AppFont.mono(size: 9, weight: .bold))
                         .kerning(1.0)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     Text(L10n.upgradeToTranscribe)
                         .font(AppFont.mono(size: 8, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
             } else {
                 // Subscribed tier - show progress ring
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.1), lineWidth: 3)
+                        .stroke(colors.selection, lineWidth: 3)
                     
                     Circle()
                         .trim(from: 0, to: subscription.usagePercentage)
@@ -804,11 +828,11 @@ struct UsageBadgeView: View {
                     Text(subscription.currentTier.displayName.uppercased())
                         .font(AppFont.mono(size: 9, weight: .bold))
                         .kerning(1.0)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     Text(subscription.remainingTranscriptionLabel)
                         .font(AppFont.mono(size: 8, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
             }
         }
@@ -821,7 +845,7 @@ struct UsageBadgeView: View {
         let percentage = subscription.usagePercentage
         if percentage >= 0.9 { return .red }
         if percentage >= 0.7 { return .orange }
-        return .white
+        return colors.primaryText
     }
 }
 
@@ -832,5 +856,4 @@ struct UsageBadgeView: View {
 #Preview("Overview") {
     SubscriptionOverviewView()
         .padding()
-        .background(Color.black)
 }

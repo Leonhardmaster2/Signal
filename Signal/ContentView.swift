@@ -4,6 +4,11 @@ import AVFoundation
 
 struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @AppStorage("appAppearance") private var appAppearance: String = AppAppearance.system.rawValue
+    
+    private var selectedColorScheme: ColorScheme? {
+        (AppAppearance(rawValue: appAppearance) ?? .system).colorScheme
+    }
     
     var body: some View {
         Group {
@@ -17,7 +22,7 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(selectedColorScheme)
     }
 }
 
@@ -25,6 +30,7 @@ struct ContentView: View {
 
 struct AdaptiveSplitView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @Query(filter: #Predicate<Recording> { !$0.isArchived }, sort: \Recording.date, order: .reverse)
     private var recordings: [Recording]
     
@@ -37,6 +43,10 @@ struct AdaptiveSplitView: View {
     @State private var recordingToDelete: Recording?
     @State private var showAudioImporter = false
     @State private var showPaywall = false
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     private var filteredRecordings: [Recording] {
         var result = recordings
@@ -95,10 +105,7 @@ struct AdaptiveSplitView: View {
                 .navigationTitle("")
                 .toolbar {
                     ToolbarItem(placement: .principal) {
-                        Text("TRACE")
-                            .font(AppFont.mono(size: 13, weight: .semibold))
-                            .kerning(4.0)
-                            .foregroundStyle(.white)
+                        AppLogo(height: 18)
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
@@ -106,11 +113,11 @@ struct AdaptiveSplitView: View {
                         } label: {
                             Image(systemName: "gearshape")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.7))
+                                .foregroundStyle(colors.primaryText.opacity(0.7))
                         }
                     }
                 }
-                .toolbarBackground(Color.black, for: .navigationBar)
+                .toolbarBackground(colors.toolbarBackground, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
                 #if os(macOS)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 360, max: 450)
@@ -124,7 +131,7 @@ struct AdaptiveSplitView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .background(Color.black.ignoresSafeArea())
+        .background(colors.background.ignoresSafeArea())
         .fullScreenCover(isPresented: $showRecorder, onDismiss: {
             autoStartRecording = false
         }) {
@@ -268,18 +275,18 @@ struct AdaptiveSplitView: View {
             // Record button
             sidebarRecordButton
         }
-        .background(Color.black)
+        .background(colors.background)
     }
     
     private var sidebarSearchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.muted)
+                .foregroundStyle(colors.mutedText)
             
             TextField(L10n.searchRecordings, text: $searchText)
                 .font(AppFont.mono(size: 13, weight: .regular))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -291,7 +298,7 @@ struct AdaptiveSplitView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color.muted)
+                        .foregroundStyle(colors.mutedText)
                 }
             }
         }
@@ -316,32 +323,32 @@ struct AdaptiveSplitView: View {
         VStack(spacing: 2) {
             Text(value)
                 .font(AppFont.mono(size: 16, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
             Text(label)
                 .font(AppFont.mono(size: 8, weight: .medium))
                 .kerning(1.0)
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
         }
         .frame(maxWidth: .infinity)
     }
     
     private var sidebarStatDivider: some View {
-        Rectangle().fill(Color.divider).frame(width: 0.5, height: 28)
+        Rectangle().fill(colors.divider).frame(width: 0.5, height: 28)
     }
     
     private var sidebarEmptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "waveform")
                 .font(.system(size: 32, weight: .thin))
-                .foregroundStyle(Color.muted)
+                .foregroundStyle(colors.mutedText)
             
             Text(L10n.noRecordings)
                 .font(AppFont.mono(size: 14, weight: .medium))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
             
             Text(L10n.tapToRecord)
                 .font(AppFont.mono(size: 12, weight: .regular))
-                .foregroundStyle(.gray.opacity(0.7))
+                .foregroundStyle(colors.secondaryText.opacity(0.7))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -354,7 +361,7 @@ struct AdaptiveSplitView: View {
             Text(label)
                 .font(AppFont.mono(size: 10, weight: .medium))
                 .kerning(2.0)
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
                 .padding(.horizontal, 16)
             
             VStack(spacing: 0) {
@@ -368,7 +375,7 @@ struct AdaptiveSplitView: View {
                     
                     if recording.uid != recordings.last?.uid {
                         Rectangle()
-                            .fill(Color.divider)
+                            .fill(colors.divider)
                             .frame(height: 0.5)
                             .padding(.horizontal, 12)
                     }
@@ -392,7 +399,7 @@ struct AdaptiveSplitView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.down")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colorScheme == .dark ? .white : .black)
                         .frame(width: 44, height: 44)
                         .glassEffect(.regular.interactive(), in: .circle)
                 }
@@ -403,13 +410,13 @@ struct AdaptiveSplitView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Circle()
-                            .fill(Color.white)
+                            .fill(colorScheme == .dark ? Color.white : Color.black)
                             .frame(width: 8, height: 8)
                         
                         Text(L10n.record)
                             .font(AppFont.mono(size: 12, weight: .bold))
                             .kerning(2.0)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colorScheme == .dark ? .white : .black)
                     }
                     .padding(.horizontal, 24)
                     .padding(.vertical, 14)
@@ -434,11 +441,11 @@ struct AdaptiveSplitView: View {
                     Text("\(hiddenRecordingsCount) \(L10n.olderRecordingsHidden)")
                         .font(AppFont.mono(size: 12, weight: .medium))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 
                 Text(L10n.upgradeUnlimitedHistory)
                     .font(AppFont.mono(size: 10, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
@@ -452,22 +459,22 @@ struct AdaptiveSplitView: View {
         VStack(spacing: 24) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 48, weight: .thin))
-                .foregroundStyle(Color.muted)
+                .foregroundStyle(colors.mutedText)
             
             VStack(spacing: 8) {
                 Text(L10n.selectRecording)
                     .font(AppFont.mono(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                 
                 Text(L10n.selectRecordingHelp)
                     .font(AppFont.mono(size: 13, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        .background(colors.background)
     }
     
     // MARK: - Helpers
@@ -495,10 +502,15 @@ struct AdaptiveSplitView: View {
 // MARK: - Sidebar Recording Row
 
 struct SidebarRecordingRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let recording: Recording
     let isSelected: Bool
     let onSelect: () -> Void
     let onDelete: () -> Void
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     var body: some View {
         Button(action: onSelect) {
@@ -509,23 +521,23 @@ struct SidebarRecordingRow: View {
                         if recording.isStarred {
                             Image(systemName: "star.fill")
                                 .font(.system(size: 8))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                         }
                         
                         Text(recording.title)
                             .font(AppFont.mono(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                             .lineLimit(1)
                     }
                     
                     HStack(spacing: 10) {
                         Text(recording.timeString)
                             .font(AppFont.mono(size: 10, weight: .regular))
-                            .foregroundStyle(Color.muted)
+                            .foregroundStyle(colors.mutedText)
                         
                         Text(recording.formattedDuration)
                             .font(AppFont.mono(size: 10, weight: .regular))
-                            .foregroundStyle(Color.muted)
+                            .foregroundStyle(colors.mutedText)
                         
                         if recording.uniqueSpeakers.count > 0 {
                             HStack(spacing: 2) {
@@ -534,7 +546,7 @@ struct SidebarRecordingRow: View {
                                 Text("\(recording.uniqueSpeakers.count)")
                                     .font(AppFont.mono(size: 10, weight: .regular))
                             }
-                            .foregroundStyle(Color.muted)
+                            .foregroundStyle(colors.mutedText)
                         }
                     }
                 }
@@ -548,13 +560,13 @@ struct SidebarRecordingRow: View {
                     if recording.isTranscribing || recording.isSummarizing {
                         ProgressView()
                             .scaleEffect(0.5)
-                            .tint(.white)
+                            .tint(colors.primaryText)
                     }
                 }
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 12)
-            .background(isSelected ? Color.white.opacity(0.1) : Color.clear)
+            .background(isSelected ? colors.selection : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -589,10 +601,10 @@ struct SidebarRecordingRow: View {
         Text(label)
             .font(AppFont.mono(size: 8, weight: .bold))
             .kerning(1.0)
-            .foregroundStyle(isActive ? .white : .gray)
+            .foregroundStyle(isActive ? colors.primaryText : colors.secondaryText)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(isActive ? Color.white.opacity(0.15) : Color.clear)
+            .background(isActive ? colors.selection : Color.clear)
             .clipShape(Capsule())
     }
 }

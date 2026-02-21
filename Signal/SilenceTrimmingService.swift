@@ -56,7 +56,7 @@ struct SegmentMap: Codable {
 
 // MARK: - Silence Detection Configuration
 
-struct SilenceDetectionConfig {
+struct SilenceDetectionConfig: Sendable {
     /// Frame duration for RMS analysis (in seconds)
     let frameDuration: TimeInterval
     

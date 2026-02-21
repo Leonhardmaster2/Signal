@@ -96,6 +96,11 @@ struct DecodedView: View {
 
     // Adaptive layout
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     var body: some View {
         ZStack {
@@ -114,7 +119,7 @@ struct DecodedView: View {
                     Text(L10n.copied)
                         .font(AppFont.mono(size: 12, weight: .bold))
                         .kerning(1.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
                         .glassCard(radius: 8)
@@ -131,7 +136,7 @@ struct DecodedView: View {
                     Text(actionToastText.uppercased())
                         .font(AppFont.mono(size: 12, weight: .bold))
                         .kerning(1.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
                         .glassCard(radius: 8)
@@ -141,10 +146,9 @@ struct DecodedView: View {
                 .allowsHitTesting(false)
             }
         }
-        .background(Color.black.ignoresSafeArea())
-        .preferredColorScheme(.dark)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(Color.black, for: .navigationBar)
+        .background(colors.background.ignoresSafeArea())
+        .toolbarColorScheme(colorScheme, for: .navigationBar)
+        .toolbarBackground(colors.toolbarBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -152,7 +156,7 @@ struct DecodedView: View {
                 Text(L10n.decodedTitle)
                     .font(AppFont.mono(size: 13, weight: .semibold))
                     .kerning(2.0)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 4) {
@@ -166,7 +170,7 @@ struct DecodedView: View {
                         } label: {
                             Image(systemName: "bubble.left.and.text.bubble.right")
                                 .font(.system(size: 15))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                         }
                     }
                     toolbarMenu
@@ -236,11 +240,11 @@ struct DecodedView: View {
                     Text(L10n.pickDateTime)
                         .font(AppFont.mono(size: 13, weight: .bold))
                         .kerning(1.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
 
                     DatePicker("", selection: $datePickerDate, displayedComponents: [.date, .hourAndMinute])
                         .datePickerStyle(.graphical)
-                        .tint(.white)
+                        .tint(colors.primaryText)
                         .labelsHidden()
 
                     Button {
@@ -267,8 +271,8 @@ struct DecodedView: View {
                     }
                 }
                 .padding(AppLayout.horizontalPadding)
-                .background(Color.black.ignoresSafeArea())
-                .preferredColorScheme(.dark)
+                .background(colors.background.ignoresSafeArea())
+                
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(L10n.cancel) {
@@ -316,6 +320,26 @@ struct DecodedView: View {
     // MARK: - Compact Layout (iPhone)
 
     private var compactLayout: some View {
+        TabView(selection: $selectedTab) {
+            Tab(L10n.distill, systemImage: "sparkles", value: 0) {
+                tabContentView(content: distillationTab)
+            }
+            
+            Tab(L10n.transcript, systemImage: "doc.text", value: 1) {
+                tabContentView(content: transcriptTab)
+            }
+            
+            Tab(L10n.notes, systemImage: "note.text", value: 2) {
+                tabContentView(content: notesTab)
+            }
+            
+            Tab(L10n.audio, systemImage: "waveform", value: 3) {
+                tabContentView(content: audioTab)
+            }
+        }
+    }
+    
+    private func tabContentView<Content: View>(content: Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             recordingHeader
                 .padding(.horizontal, AppLayout.horizontalPadding)
@@ -329,23 +353,12 @@ struct DecodedView: View {
                     .padding(.bottom, 16)
             }
 
-            tabSelector
-                .padding(.horizontal, AppLayout.horizontalPadding)
-                .padding(.bottom, 24)
-
             ScrollViewReader { scrollProxy in
                 ScrollView {
-                    Group {
-                        switch selectedTab {
-                        case 0: distillationTab
-                        case 1: transcriptTab
-                        case 2: notesTab
-                        case 3: audioTab
-                        default: EmptyView()
-                        }
-                    }
-                    .padding(.horizontal, AppLayout.horizontalPadding)
-                    .padding(.bottom, 40)
+                    content
+                        .padding(.horizontal, AppLayout.horizontalPadding)
+                        .padding(.top, 8)
+                        .padding(.bottom, 40)
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .onChange(of: scrollToSegmentIndex) { _, newValue in
@@ -402,17 +415,17 @@ struct DecodedView: View {
 
                                 let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
                                 let path = Path(roundedRect: rect, cornerRadius: 1)
-                                context.fill(path, with: .color(.white.opacity(isPast ? 0.6 : 0.1)))
+                                context.fill(path, with: .color(colors.primaryText.opacity(isPast ? 0.6 : 0.1)))
                             }
                         } else {
                             // No waveform data — show simple progress bar
                             let trackRect = CGRect(x: 0, y: size.height / 2 - 1.5, width: size.width, height: 3)
-                            context.fill(Path(roundedRect: trackRect, cornerRadius: 1.5), with: .color(.white.opacity(0.08)))
+                            context.fill(Path(roundedRect: trackRect, cornerRadius: 1.5), with: .color(colors.primaryText.opacity(0.08)))
 
                             let prog = sharedPlayer.progress
                             if prog > 0 {
                                 let fillRect = CGRect(x: 0, y: size.height / 2 - 1.5, width: size.width * prog, height: 3)
-                                context.fill(Path(roundedRect: fillRect, cornerRadius: 1.5), with: .color(.white.opacity(0.5)))
+                                context.fill(Path(roundedRect: fillRect, cornerRadius: 1.5), with: .color(colors.primaryText.opacity(0.5)))
                             }
                         }
                     }
@@ -421,7 +434,7 @@ struct DecodedView: View {
                     // Scrub line
                     if sharedPlayer.progress > 0 {
                         Rectangle()
-                            .fill(Color.white)
+                            .fill(colors.primaryText)
                             .frame(width: 1.5, height: height + 8)
                             .offset(x: sharedPlayer.progress * width - 0.75)
                     }
@@ -440,7 +453,7 @@ struct DecodedView: View {
             // Current time
             Text(AudioPlayer.formatTime(sharedPlayer.isPlaying || sharedPlayer.currentTime > 0 ? sharedPlayer.currentTime : recording.duration))
                 .font(AppFont.mono(size: 10, weight: .medium))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
                 .frame(width: 42, alignment: .trailing)
 
             // Skip forward 15s
@@ -450,7 +463,7 @@ struct DecodedView: View {
             } label: {
                 Image(systemName: "goforward.15")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(colors.secondaryText)
             }
         }
         .padding(.horizontal, 12)
@@ -561,12 +574,12 @@ struct DecodedView: View {
                 HStack {
                     Text(recording.title)
                         .font(AppFont.mono(size: 28, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     if recording.isStarred {
                         Image(systemName: "star.fill")
                             .font(.system(size: 14))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                     }
                 }
                 
@@ -581,7 +594,7 @@ struct DecodedView: View {
                     }
                 }
                 .font(AppFont.mono(size: 12, weight: .regular))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
             }
             
             Spacer()
@@ -592,16 +605,16 @@ struct DecodedView: View {
                     HStack(spacing: 8) {
                         ProgressView()
                             .scaleEffect(0.7)
-                            .tint(.white)
+                            .tint(colors.primaryText)
                         Text(L10n.transcribing)
                             .font(AppFont.mono(size: 11, weight: .semibold))
                             .kerning(1.0)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
 
                         if (recording.transcriptionProgress ?? 0) > 0 {
                             Text("\(Int((recording.transcriptionProgress ?? 0) * 100))%")
                                 .font(AppFont.mono(size: 11, weight: .bold))
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(colors.secondaryText)
                         }
 
                         Button {
@@ -609,7 +622,7 @@ struct DecodedView: View {
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(colors.secondaryText)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -619,11 +632,11 @@ struct DecodedView: View {
                     HStack(spacing: 8) {
                         ProgressView()
                             .scaleEffect(0.7)
-                            .tint(.white)
+                            .tint(colors.primaryText)
                         Text(L10n.summarizing)
                             .font(AppFont.mono(size: 11, weight: .semibold))
                             .kerning(1.0)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -686,10 +699,10 @@ struct DecodedView: View {
                                         .font(AppFont.mono(size: 11, weight: .medium))
                                         .lineLimit(1)
                                 }
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Color.white.opacity(0.1))
+                                .background(colors.selection)
                                 .clipShape(Capsule())
                             }
                         }
@@ -708,10 +721,10 @@ struct DecodedView: View {
         } else if recording.isTranscribing {
             VStack(spacing: 12) {
                 ProgressView()
-                    .tint(.white)
+                    .tint(colors.primaryText)
                 Text(L10n.transcribing)
                     .font(AppFont.mono(size: 12))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
 
                 if (recording.transcriptionProgress ?? 0) > 0 {
                     VStack(spacing: 4) {
@@ -731,7 +744,7 @@ struct DecodedView: View {
 
                         Text("\(Int((recording.transcriptionProgress ?? 0) * 100))%")
                             .font(AppFont.mono(size: 10))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                 }
 
@@ -741,10 +754,10 @@ struct DecodedView: View {
                     Text(L10n.cancel.uppercased())
                         .font(AppFont.mono(size: 10, weight: .bold))
                         .kerning(1.0)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(colors.secondaryText)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.1))
+                        .background(colors.selection)
                         .clipShape(Capsule())
                 }
             }
@@ -754,10 +767,10 @@ struct DecodedView: View {
             VStack(spacing: 12) {
                 Image(systemName: "text.alignleft")
                     .font(.system(size: 24, weight: .thin))
-                    .foregroundStyle(Color.muted)
+                    .foregroundStyle(colors.mutedText)
                 Text(L10n.noTranscriptYet)
                     .font(AppFont.mono(size: 12))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
@@ -765,9 +778,9 @@ struct DecodedView: View {
     }
     
     private func wideTranscriptRow(_ segment: SegmentData, index: Int, isActive: Bool, isHighlighted: Bool = false) -> some View {
-        let bgColor: Color = isHighlighted ? Color.yellow.opacity(0.15) : (isActive ? Color.white.opacity(0.08) : Color.clear)
+        let bgColor: Color = isHighlighted ? Color.yellow.opacity(0.15) : (isActive ? colors.selection : Color.clear)
         let borderColor: Color = isHighlighted ? Color.yellow.opacity(0.4) : Color.clear
-        let textColor: Color = isActive ? .white : .gray
+        let textColor: Color = isActive ? colors.primaryText : colors.secondaryText
 
         return wideTranscriptRowContent(segment, index: index, isActive: isActive, textColor: textColor)
             .padding(.vertical, 8)
@@ -798,12 +811,12 @@ struct DecodedView: View {
                 if isActive {
                     Image(systemName: "waveform")
                         .font(.system(size: 10))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isActive)
                 }
                 Text(segment.timestamp.formatted)
                     .font(AppFont.mono(size: 10, weight: .regular))
-                    .foregroundStyle(Color.muted)
+                    .foregroundStyle(colors.mutedText)
             }
             .frame(width: 50, alignment: .trailing)
 
@@ -811,7 +824,7 @@ struct DecodedView: View {
                 if !segment.speaker.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text(recording.displayName(for: segment.speaker))
                         .font(AppFont.mono(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
 
                 Text(segment.text)
@@ -828,7 +841,7 @@ struct DecodedView: View {
             } label: {
                 Image(systemName: "pencil")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(colors.secondaryText)
             }
         }
     }
@@ -842,10 +855,10 @@ struct DecodedView: View {
                     Text(L10n.theOneLiner)
                         .font(AppFont.mono(size: 9, weight: .medium))
                         .kerning(1.0)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                     Text(summary.oneLiner)
                         .font(AppFont.mono(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .lineSpacing(3)
                 }
                 
@@ -855,7 +868,7 @@ struct DecodedView: View {
                         Text(L10n.actionVectors)
                             .font(AppFont.mono(size: 9, weight: .medium))
                             .kerning(1.0)
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                         
                         ForEach(summary.actionVectors) { action in
                             HStack(alignment: .top, spacing: 10) {
@@ -874,10 +887,10 @@ struct DecodedView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(action.task)
                                         .font(AppFont.mono(size: 13, weight: .medium))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                     Text(action.assignee)
                                         .font(AppFont.mono(size: 10, weight: .regular))
-                                        .foregroundStyle(.gray)
+                                        .foregroundStyle(colors.secondaryText)
                                 }
                             }
                             .padding(.vertical, 6)
@@ -890,20 +903,20 @@ struct DecodedView: View {
                     Text(L10n.context)
                         .font(AppFont.mono(size: 9, weight: .medium))
                         .kerning(1.0)
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                     Text(summary.context)
                         .font(AppFont.mono(size: 13, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                         .lineSpacing(4)
                 }
             }
         } else if recording.isSummarizing {
             VStack(spacing: 12) {
                 ProgressView()
-                    .tint(.white)
+                    .tint(colors.primaryText)
                 Text(L10n.summarizing)
                     .font(AppFont.mono(size: 12))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
@@ -911,10 +924,10 @@ struct DecodedView: View {
             VStack(spacing: 12) {
                 Image(systemName: "brain")
                     .font(.system(size: 24, weight: .thin))
-                    .foregroundStyle(Color.muted)
+                    .foregroundStyle(colors.mutedText)
                 Text(L10n.readyToSummarize)
                     .font(AppFont.mono(size: 12))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
@@ -922,10 +935,10 @@ struct DecodedView: View {
             VStack(spacing: 12) {
                 Image(systemName: "brain")
                     .font(.system(size: 24, weight: .thin))
-                    .foregroundStyle(Color.muted)
+                    .foregroundStyle(colors.mutedText)
                 Text(L10n.transcribeFirstToUnlock)
                     .font(AppFont.mono(size: 12))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -941,11 +954,11 @@ struct DecodedView: View {
                 set: { recording.notes = $0.isEmpty ? nil : $0 }
             ))
             .font(AppFont.mono(size: 13, weight: .regular))
-            .foregroundStyle(.white)
+            .foregroundStyle(colors.primaryText)
             .scrollContentBackground(.hidden)
             .frame(minHeight: 100)
             .padding(10)
-            .background(Color.white.opacity(0.05))
+            .background(colors.selection)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             
             // Image attachments
@@ -953,14 +966,14 @@ struct DecodedView: View {
                 Text(L10n.attachments)
                     .font(AppFont.mono(size: 9, weight: .medium))
                     .kerning(1.0)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                 
                 Spacer()
                 
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Image(systemName: "photo")
                         .font(.system(size: 14))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(colors.secondaryText)
                 }
                 
                 #if os(iOS)
@@ -970,7 +983,7 @@ struct DecodedView: View {
                     } label: {
                         Image(systemName: "camera")
                             .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(colors.secondaryText)
                     }
                 }
                 #endif
@@ -1054,19 +1067,6 @@ struct DecodedView: View {
                 } label: {
                     Label(L10n.deleteTranscript, systemImage: "text.badge.minus")
                 }
-
-                Divider()
-                
-                // Ask Your Audio - Pro only
-                Button {
-                    if FeatureGate.canAccess(.audioSearch) {
-                        showAudioSearch = true
-                    } else {
-                        showPaywall = true
-                    }
-                } label: {
-                    Label(L10n.askYourAudio, systemImage: "bubble.left.and.text.bubble.right")
-                }
             }
 
             Divider()
@@ -1077,12 +1077,12 @@ struct DecodedView: View {
                 } label: {
                     Label(L10n.shareAudio, systemImage: "square.and.arrow.up")
                 }
-                
-                Button {
-                    shareTracePackage()
-                } label: {
-                    Label(L10n.shareTracePackage, systemImage: "shippingbox")
-                }
+            }
+            
+            Button {
+                shareTracePackage()
+            } label: {
+                Label(L10n.shareTracePackage, systemImage: "shippingbox")
             }
 
             if recording.hasTranscript {
@@ -1138,7 +1138,7 @@ struct DecodedView: View {
             }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
         }
     }
 
@@ -1154,11 +1154,11 @@ struct DecodedView: View {
                     HStack(spacing: 6) {
                         Text(recording.title)
                             .font(AppFont.mono(size: 24, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                             .lineLimit(1)
                         Image(systemName: "pencil")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(colors.secondaryText)
                     }
                 }
 
@@ -1167,7 +1167,7 @@ struct DecodedView: View {
                 if recording.isStarred {
                     Image(systemName: "star.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
             }
 
@@ -1182,7 +1182,7 @@ struct DecodedView: View {
                 }
             }
             .font(AppFont.mono(size: 11, weight: .regular))
-            .foregroundStyle(.gray)
+            .foregroundStyle(colors.secondaryText)
 
             if !recording.amplitudeSamples.isEmpty {
                 FrequencyBar(samples: recording.amplitudeSamples, height: 20)
@@ -1205,17 +1205,17 @@ struct DecodedView: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .scaleEffect(0.7)
-                    .tint(.white)
+                    .tint(colors.primaryText)
 
                 Text(label)
                     .font(AppFont.mono(size: 11, weight: .semibold))
                     .kerning(1.0)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
 
                 if let progress, progress > 0 {
                     Text("\(Int(progress * 100))%")
                         .font(AppFont.mono(size: 11, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(colors.secondaryText)
                 }
 
                 Spacer()
@@ -1227,10 +1227,10 @@ struct DecodedView: View {
                         Text(L10n.cancel.uppercased())
                             .font(AppFont.mono(size: 10, weight: .bold))
                             .kerning(1.0)
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(colors.secondaryText)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(Color.white.opacity(0.1))
+                            .background(colors.selection)
                             .clipShape(Capsule())
                     }
                 }
@@ -1264,18 +1264,18 @@ struct DecodedView: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 12))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
 
             Text(message)
                 .font(AppFont.mono(size: 11, weight: .regular))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
                 .lineLimit(2)
 
             Spacer()
 
             Button(L10n.retry) { transcribe() }
                 .font(AppFont.mono(size: 11, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -1307,18 +1307,20 @@ struct DecodedView: View {
             Text(title)
                 .font(AppFont.mono(size: 11, weight: selectedTab == index ? .bold : .medium))
                 .kerning(1.2)
-                .foregroundStyle(selectedTab == index ? .white : .gray)
+                .foregroundStyle(selectedTab == index ? colors.primaryText : colors.secondaryText)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .background {
                     if selectedTab == index {
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white.opacity(0.15))
+                            .fill(colors.selection)
                             .matchedGeometryEffect(id: "tabIndicator", in: tabNamespace)
                     }
                 }
         }
     }
+    
+
 
     // MARK: - Tab 1: Distillation
 
@@ -1334,7 +1336,7 @@ struct DecodedView: View {
                     }
                     Text(summary.oneLiner)
                         .font(AppFont.mono(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .lineSpacing(4)
                 }
 
@@ -1349,7 +1351,7 @@ struct DecodedView: View {
                     TrackedLabel(L10n.context, size: 10, kerning: 1.5)
                     Text(summary.context)
                         .font(AppFont.mono(size: 14, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                         .lineSpacing(5)
                 }
 
@@ -1518,9 +1520,9 @@ struct DecodedView: View {
 
                                             Image(systemName: "pencil")
                                                 .font(.system(size: 8))
-                                                .foregroundStyle(.white.opacity(0.4))
+                                                .foregroundStyle(colors.secondaryText)
                                         }
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
                                         .glassCard(radius: 100)
@@ -1535,7 +1537,7 @@ struct DecodedView: View {
                 Text("\(segments.count) \(L10n.segments)")
                     .font(AppFont.mono(size: 10, weight: .medium))
                     .kerning(1.0)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .padding(.bottom, 4)
 
                 ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
@@ -1619,7 +1621,7 @@ struct DecodedView: View {
                 set: { recording.notes = $0.isEmpty ? nil : $0 }
             ))
             .font(AppFont.mono(size: 14, weight: .regular))
-            .foregroundStyle(.white)
+            .foregroundStyle(colors.primaryText)
             .scrollContentBackground(.hidden)
             .frame(minHeight: 150)
             .padding(12)
@@ -1628,7 +1630,7 @@ struct DecodedView: View {
             if recording.notes == nil || recording.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
                 Text(L10n.tapToAddNotes)
                     .font(AppFont.mono(size: 12, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .multilineTextAlignment(.leading)
             }
 
@@ -1643,7 +1645,7 @@ struct DecodedView: View {
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                             Image(systemName: "photo")
                                 .font(.system(size: 16))
-                                .foregroundStyle(.white.opacity(0.6))
+                                .foregroundStyle(colors.secondaryText)
                         }
                         
                         #if os(iOS)
@@ -1653,7 +1655,7 @@ struct DecodedView: View {
                             } label: {
                                 Image(systemName: "camera")
                                     .font(.system(size: 16))
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(colors.secondaryText)
                             }
                         }
                         #endif
@@ -1679,7 +1681,7 @@ struct DecodedView: View {
                 } else {
                     Text(L10n.addPhotosDescription)
                         .font(AppFont.mono(size: 12, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(4)
                         .padding(.vertical, 8)
@@ -1689,10 +1691,10 @@ struct DecodedView: View {
             if isProcessingImage {
                 HStack {
                     ProgressView()
-                        .tint(.white)
+                        .tint(colors.primaryText)
                     Text(L10n.processingImage)
                         .font(AppFont.mono(size: 12))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
             }
         }
@@ -1811,17 +1813,17 @@ struct DecodedView: View {
 
                 Text(L10n.reencodeDescription)
                     .font(AppFont.mono(size: 11))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .lineSpacing(3)
 
                 if isCompressing {
                     HStack(spacing: 8) {
                         ProgressView()
                             .scaleEffect(0.7)
-                            .tint(.white)
+                            .tint(colors.primaryText)
                         Text(L10n.compressing)
                             .font(AppFont.mono(size: 11))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                 } else {
                     HStack(spacing: 8) {
@@ -1834,7 +1836,7 @@ struct DecodedView: View {
                 if let result = compressionResult {
                     Text(result)
                         .font(AppFont.mono(size: 10))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                         .padding(.top, 4)
                 }
             }
@@ -1858,7 +1860,7 @@ struct DecodedView: View {
             Text(label)
                 .font(AppFont.mono(size: 11, weight: .bold))
                 .kerning(1.0)
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .glassCard(radius: 8)
@@ -1946,11 +1948,11 @@ struct DecodedView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(action.task)
                     .font(AppFont.mono(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .lineSpacing(3)
                 Text(action.assignee)
                     .font(AppFont.mono(size: 11, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
         }
         .padding(.vertical, 10)
@@ -1972,11 +1974,11 @@ struct DecodedView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(AppFont.mono(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .lineSpacing(3)
                 Text(subtitle)
                     .font(AppFont.mono(size: 11, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
 
             Spacer()
@@ -1984,7 +1986,7 @@ struct DecodedView: View {
             if let trailing {
                 Image(systemName: trailing)
                     .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(colors.secondaryText)
                     .padding(.top, 2)
             }
         }
@@ -2054,9 +2056,9 @@ struct DecodedView: View {
     }
 
     private func transcriptRow(_ segment: SegmentData, index: Int, isActive: Bool, isHighlighted: Bool = false) -> some View {
-        let bgColor: Color = isHighlighted ? Color.yellow.opacity(0.15) : (isActive ? Color.white.opacity(0.15) : Color.clear)
-        let borderColor: Color = isHighlighted ? Color.yellow.opacity(0.4) : (isActive ? Color.white.opacity(0.3) : Color.clear)
-        let textColor: Color = isActive ? .white : .gray
+        let bgColor: Color = isHighlighted ? Color.yellow.opacity(0.15) : (isActive ? colors.selection : Color.clear)
+        let borderColor: Color = isHighlighted ? Color.yellow.opacity(0.4) : (isActive ? colors.selection : Color.clear)
+        let textColor: Color = isActive ? colors.primaryText : colors.secondaryText
 
         return transcriptRowContent(segment, index: index, isActive: isActive, textColor: textColor)
             .padding(.vertical, 10)
@@ -2085,19 +2087,19 @@ struct DecodedView: View {
                 if isActive {
                     Image(systemName: "waveform")
                         .font(.system(size: 10))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .symbolEffect(.variableColor.iterative, options: .repeating, isActive: isActive)
                 }
 
                 if !segment.speaker.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text(recording.displayName(for: segment.speaker))
                         .font(AppFont.mono(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
 
                 Text(segment.timestamp.formatted)
                     .font(AppFont.mono(size: 11, weight: .regular))
-                    .foregroundStyle(Color.muted)
+                    .foregroundStyle(colors.mutedText)
 
                 Spacer()
 
@@ -2107,7 +2109,7 @@ struct DecodedView: View {
                 } label: {
                     Image(systemName: "pencil")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(colors.secondaryText)
                 }
             }
 
@@ -2124,16 +2126,16 @@ struct DecodedView: View {
 
             Image(systemName: icon)
                 .font(.system(size: 32, weight: .thin))
-                .foregroundStyle(Color.muted)
+                .foregroundStyle(colors.mutedText)
 
             Text(title)
                 .font(AppFont.mono(size: 13, weight: .bold))
                 .kerning(1.5)
-                .foregroundStyle(Color.muted)
+                .foregroundStyle(colors.mutedText)
 
             Text(subtitle)
                 .font(AppFont.mono(size: 12, weight: .regular))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
                 .multilineTextAlignment(.center)
 
             if let (label, fn) = action {
@@ -2159,11 +2161,11 @@ struct DecodedView: View {
         HStack {
             Text(label)
                 .font(AppFont.mono(size: 12, weight: .medium))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
             Spacer()
             Text(value)
                 .font(AppFont.mono(size: 12, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .lineLimit(1)
         }
         .padding(.vertical, 8)
@@ -2460,11 +2462,16 @@ struct DecodedView: View {
 // MARK: - Playback Waveform View (with real audio)
 
 struct PlaybackWaveformView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let samples: [Float]
     let duration: TimeInterval
     let marks: [TimeInterval]
     let audioURL: URL?
     @Bindable var player: AudioPlayer
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -2489,7 +2496,7 @@ struct PlaybackWaveformView: View {
 
                             let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
                             let path = Path(roundedRect: rect, cornerRadius: 1)
-                            context.fill(path, with: .color(.white.opacity(isPast ? 0.7 : 0.12)))
+                            context.fill(path, with: .color(colors.primaryText.opacity(isPast ? 0.7 : 0.12)))
                         }
 
                         // Draw mark indicators
@@ -2497,14 +2504,14 @@ struct PlaybackWaveformView: View {
                             guard duration > 0 else { continue }
                             let markX = CGFloat(mark / duration) * size.width
                             let markRect = CGRect(x: markX - 0.5, y: 0, width: 1, height: size.height)
-                            context.fill(Path(markRect), with: .color(.white.opacity(0.4)))
+                            context.fill(Path(markRect), with: .color(colors.primaryText.opacity(0.4)))
                         }
                     }
                     .frame(height: height)
 
                     // Playback scrub line
                     Rectangle()
-                        .fill(Color.white)
+                        .fill(colors.primaryText)
                         .frame(width: 2, height: height + 16)
                         .offset(x: player.progress * width - 1)
                 }
@@ -2523,7 +2530,7 @@ struct PlaybackWaveformView: View {
                 // Current time
                 Text(AudioPlayer.formatTime(player.currentTime))
                     .font(AppFont.mono(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .frame(width: 54, alignment: .leading)
 
                 Spacer()
@@ -2535,7 +2542,7 @@ struct PlaybackWaveformView: View {
                 } label: {
                     Image(systemName: "gobackward.15")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(colors.secondaryText)
                         .frame(width: 40, height: 40)
                         .glassCard(radius: 20)
                 }
@@ -2548,12 +2555,12 @@ struct PlaybackWaveformView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(Color.white)
+                            .fill(colors.primaryText)
                             .frame(width: 48, height: 48)
 
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(colors.background)
                             .offset(x: player.isPlaying ? 0 : 2)
                     }
                 }
@@ -2567,7 +2574,7 @@ struct PlaybackWaveformView: View {
                 } label: {
                     Image(systemName: "goforward.15")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(colors.secondaryText)
                         .frame(width: 40, height: 40)
                         .glassCard(radius: 20)
                 }
@@ -2577,7 +2584,7 @@ struct PlaybackWaveformView: View {
                 // Total duration
                 Text(AudioPlayer.formatTime(duration))
                     .font(AppFont.mono(size: 12, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .frame(width: 54, alignment: .trailing)
             }
             .padding(.horizontal, 4)
@@ -2608,7 +2615,10 @@ struct NoteImageThumbnail: View {
     let onTap: (PlatformImage) -> Void
     let onDelete: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var loadedImage: PlatformImage?
+    
+    private var colors: AppColors { AppColors(colorScheme: colorScheme) }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -2648,7 +2658,7 @@ struct NoteImageThumbnail: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.glassBorder, lineWidth: AppLayout.glassBorderWidth)
+                    .stroke(colors.glassBorder, lineWidth: AppLayout.glassBorderWidth)
             )
 
             // Delete button
@@ -2718,9 +2728,14 @@ struct CameraView: UIViewControllerRepresentable {
 
 /// Sheet for viewing an image and extracting text via OCR
 struct ImageOCRSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
     let image: PlatformImage
     let onExtractText: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     @State private var extractedText: String?
     @State private var isExtracting = false
@@ -2738,7 +2753,7 @@ struct ImageOCRSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.glassBorder, lineWidth: AppLayout.glassBorderWidth)
+                            .stroke(colors.glassBorder, lineWidth: AppLayout.glassBorderWidth)
                     )
                 #elseif canImport(AppKit)
                 Image(nsImage: image)
@@ -2748,17 +2763,17 @@ struct ImageOCRSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.glassBorder, lineWidth: AppLayout.glassBorderWidth)
+                            .stroke(colors.glassBorder, lineWidth: AppLayout.glassBorderWidth)
                     )
                 #endif
 
                 if isExtracting {
                     HStack {
                         ProgressView()
-                            .tint(.white)
+                            .tint(colors.primaryText)
                         Text(L10n.extractingText)
                             .font(AppFont.mono(size: 14))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                     .padding()
                 } else if let text = extractedText {
@@ -2768,7 +2783,7 @@ struct ImageOCRSheet: View {
                         ScrollView {
                             Text(text.isEmpty ? "No text found in image." : text)
                                 .font(AppFont.mono(size: 14))
-                                .foregroundStyle(text.isEmpty ? .gray : .white)
+                                .foregroundStyle(text.isEmpty ? colors.secondaryText : colors.primaryText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .frame(maxHeight: 200)
@@ -2782,10 +2797,10 @@ struct ImageOCRSheet: View {
                                 Text(L10n.addToNotes)
                                     .font(AppFont.mono(size: 12, weight: .bold))
                                     .kerning(1.5)
-                                    .foregroundStyle(.black)
+                                    .foregroundStyle(colors.background)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
-                                    .background(Color.white)
+                                    .background(colors.primaryText)
                                     .clipShape(Capsule())
                             }
                         }
@@ -2794,17 +2809,17 @@ struct ImageOCRSheet: View {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 32))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                         Text(error)
                             .font(AppFont.mono(size: 14))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                             .multilineTextAlignment(.center)
 
                         Button(L10n.retry) {
                             extractText()
                         }
                         .font(AppFont.mono(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
                         .glassCard(radius: 20)
@@ -2819,10 +2834,10 @@ struct ImageOCRSheet: View {
                         }
                         .font(AppFont.mono(size: 12, weight: .bold))
                         .kerning(1.5)
-                        .foregroundStyle(.black)
+                        .foregroundStyle(colors.background)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.white)
+                        .background(colors.primaryText)
                         .clipShape(Capsule())
                     }
                 }
@@ -2830,22 +2845,21 @@ struct ImageOCRSheet: View {
                 Spacer()
             }
             .padding()
-            .background(Color.black.ignoresSafeArea())
-            .preferredColorScheme(.dark)
+            .background(colors.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(L10n.image)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L10n.done) {
                         dismiss()
                     }
                     .font(AppFont.mono(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                 }
             }
         }
@@ -2875,6 +2889,7 @@ struct ImageOCRSheet: View {
 // MARK: - Transcript Segment Editor
 
 struct TranscriptSegmentEditor: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var text: String
     let speakerName: String
     let timestamp: TimeInterval
@@ -2884,6 +2899,10 @@ struct TranscriptSegmentEditor: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isTextFieldFocused: Bool
     
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
+    
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
@@ -2892,15 +2911,15 @@ struct TranscriptSegmentEditor: View {
                     if !speakerName.trimmingCharacters(in: .whitespaces).isEmpty {
                         Image(systemName: "person.fill")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(colors.secondaryText)
                         Text(speakerName)
                             .font(AppFont.mono(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                     }
 
                     Text(timestamp.formatted)
                         .font(AppFont.mono(size: 12))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
                 .padding(.horizontal)
                 
@@ -2911,7 +2930,7 @@ struct TranscriptSegmentEditor: View {
                     
                     TextEditor(text: $text)
                         .font(AppFont.mono(size: 14))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 200)
                         .padding(12)
@@ -2930,25 +2949,24 @@ struct TranscriptSegmentEditor: View {
                     Text(L10n.saveChanges)
                         .font(AppFont.mono(size: 12, weight: .bold))
                         .kerning(1.5)
-                        .foregroundStyle(.black)
+                        .foregroundStyle(colors.background)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.white)
+                        .background(colors.primaryText)
                         .clipShape(Capsule())
                 }
                 .padding(.horizontal)
                 .padding(.bottom)
             }
             .padding(.top)
-            .background(Color.black.ignoresSafeArea())
-            .preferredColorScheme(.dark)
+            .background(colors.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(L10n.editSegment)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.cancel) {
@@ -2956,7 +2974,7 @@ struct TranscriptSegmentEditor: View {
                         dismiss()
                     }
                     .font(AppFont.mono(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                 }
             }
             .onAppear {
@@ -2969,11 +2987,16 @@ struct TranscriptSegmentEditor: View {
 // MARK: - Transcription Method Chooser
 
 struct TranscriptionMethodChooser: View {
+    @Environment(\.colorScheme) private var colorScheme
     let recordingDuration: TimeInterval
     let onChooseApple: () -> Void
     let onChooseAPI: () -> Void
     
     @Environment(\.dismiss) private var dismiss
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     private var subscription: SubscriptionManager { SubscriptionManager.shared }
     private var isOnDeviceAvailable: Bool { OnDeviceTranscriptionService.shared.isOnDeviceAvailable }
@@ -2985,15 +3008,15 @@ struct TranscriptionMethodChooser: View {
                 VStack(spacing: 8) {
                     Image(systemName: "waveform.badge.magnifyingglass")
                         .font(.system(size: 40, weight: .thin))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     Text(L10n.chooseTranscriptionMethod)
                         .font(AppFont.mono(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     Text(L10n.selectTranscriptionMethod)
                         .font(AppFont.mono(size: 12))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 20)
@@ -3010,17 +3033,17 @@ struct TranscriptionMethodChooser: View {
                                 HStack {
                                     Image(systemName: "apple.logo")
                                         .font(.system(size: 20))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(L10n.appleOnDevice)
                                             .font(AppFont.mono(size: 13, weight: .bold))
                                             .kerning(1.0)
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(colors.primaryText)
                                         
                                         Text(L10n.privateAndUnlimited)
                                             .font(AppFont.mono(size: 11))
-                                            .foregroundStyle(.gray)
+                                            .foregroundStyle(colors.secondaryText)
                                     }
                                     
                                     Spacer()
@@ -3032,7 +3055,7 @@ struct TranscriptionMethodChooser: View {
                                         
                                         Text(L10n.unlimited)
                                             .font(AppFont.mono(size: 10))
-                                            .foregroundStyle(.gray)
+                                            .foregroundStyle(colors.secondaryText)
                                     }
                                 }
                                 
@@ -3048,7 +3071,7 @@ struct TranscriptionMethodChooser: View {
                             .glassCard(radius: 12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                    .stroke(colors.glassBorder, lineWidth: 1)
                             )
                         }
                     }
@@ -3061,17 +3084,17 @@ struct TranscriptionMethodChooser: View {
                             HStack {
                                 Image(systemName: "cloud.fill")
                                     .font(.system(size: 20))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(L10n.elevenlabsAPI)
                                         .font(AppFont.mono(size: 13, weight: .bold))
                                         .kerning(1.0)
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                     
                                     Text(L10n.higherAccuracy)
                                         .font(AppFont.mono(size: 11))
-                                        .foregroundStyle(.gray)
+                                        .foregroundStyle(colors.secondaryText)
                                 }
                                 
                                 Spacer()
@@ -3079,13 +3102,13 @@ struct TranscriptionMethodChooser: View {
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text(subscription.remainingTranscriptionLabel)
                                         .font(AppFont.mono(size: 11, weight: .bold))
-                                        .foregroundStyle(subscription.remainingTranscriptionSeconds > recordingDuration ? .white : .orange)
+                                        .foregroundStyle(subscription.remainingTranscriptionSeconds > recordingDuration ? colors.primaryText : .orange)
                                     
                                     // Usage bar
                                     GeometryReader { geo in
                                         ZStack(alignment: .leading) {
                                             RoundedRectangle(cornerRadius: 2)
-                                                .fill(Color.white.opacity(0.1))
+                                                .fill(colors.surface)
                                             RoundedRectangle(cornerRadius: 2)
                                                 .fill(usageColor)
                                                 .frame(width: geo.size.width * (1 - subscription.usagePercentage))
@@ -3107,7 +3130,7 @@ struct TranscriptionMethodChooser: View {
                         .glassCard(radius: 12)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                .stroke(colors.glassBorder, lineWidth: 1)
                         )
                     }
                     .disabled(!subscription.canTranscribe(duration: recordingDuration))
@@ -3126,18 +3149,18 @@ struct TranscriptionMethodChooser: View {
                     HStack {
                         Text(L10n.monthlyAPIUsage)
                             .font(AppFont.mono(size: 11))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                         Spacer()
                         Text("\(subscription.currentTier.displayName) \(L10n.plan)")
                             .font(AppFont.mono(size: 11, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                     }
                     
                     // Full-width usage bar
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 3)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(colors.surface)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(usageColor)
                                 .frame(width: geo.size.width * subscription.usagePercentage)
@@ -3148,11 +3171,11 @@ struct TranscriptionMethodChooser: View {
                     HStack {
                         Text(formatDuration(subscription.usage.transcriptionSecondsUsed) + " used")
                             .font(AppFont.mono(size: 10))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                         Spacer()
                         Text(subscription.currentTier.transcriptionLimitLabel)
                             .font(AppFont.mono(size: 10))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                 }
                 .padding()
@@ -3161,22 +3184,21 @@ struct TranscriptionMethodChooser: View {
                 
                 Spacer()
             }
-            .background(Color.black.ignoresSafeArea())
-            .preferredColorScheme(.dark)
+            .background(colors.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(L10n.transcribe.uppercased())
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.cancel) {
                         dismiss()
                     }
                     .font(AppFont.mono(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                 }
             }
         }
@@ -3201,7 +3223,7 @@ struct TranscriptionMethodChooser: View {
             Text(text)
                 .font(AppFont.mono(size: 9))
         }
-        .foregroundStyle(.gray)
+        .foregroundStyle(colors.secondaryText)
     }
     
     private func formatDuration(_ seconds: TimeInterval) -> String {

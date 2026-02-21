@@ -5,10 +5,12 @@ import Speech
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage("autoTranscribe") private var autoTranscribe: Bool = true
     @AppStorage("hapticFeedbackEnabled") private var hapticFeedback: Bool = true
     @AppStorage("recordingQuality") private var recordingQuality: String = "standard"
+    @AppStorage("appAppearance") private var appAppearance: String = AppAppearance.system.rawValue
     
     // On-device intelligence settings
     @AppStorage("useOnDeviceTranscription") private var useOnDeviceTranscription: Bool = false
@@ -26,10 +28,15 @@ struct SettingsView: View {
     @State private var iCloudSync = iCloudSyncService.shared
     @State private var showRestoreConfirmation = false
 
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: AppLayout.sectionSpacing) {
                 subscriptionSection
+                appearanceSection
                 iCloudSection
                 recordingSection
                 onDeviceIntelligenceSection
@@ -44,14 +51,14 @@ struct SettingsView: View {
             .padding(.horizontal, AppLayout.horizontalPadding)
             .padding(.vertical, 24)
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(colors.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text(L10n.settings)
                     .font(AppFont.mono(size: 13, weight: .semibold))
                     .kerning(2.0)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
             }
         }
     }
@@ -62,6 +69,65 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             TrackedLabel(L10n.subscription)
             SubscriptionOverviewView()
+        }
+    }
+    
+    // MARK: - Appearance
+    
+    private var selectedAppearance: AppAppearance {
+        get { AppAppearance(rawValue: appAppearance) ?? .system }
+        set { appAppearance = newValue.rawValue }
+    }
+    
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TrackedLabel(L10n.appearance)
+            
+            VStack(spacing: 0) {
+                ForEach(AppAppearance.allCases) { appearance in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            appAppearance = appearance.rawValue
+                        }
+                    } label: {
+                        HStack {
+                            HStack(spacing: 10) {
+                                Image(systemName: appearanceIcon(for: appearance))
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(colors.primaryText)
+                                    .frame(width: 20)
+                                
+                                Text(appearance.displayName)
+                                    .font(AppFont.mono(size: 13, weight: selectedAppearance == appearance ? .bold : .medium))
+                                    .foregroundStyle(colors.primaryText)
+                            }
+                            
+                            Spacer()
+                            
+                            if selectedAppearance == appearance {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(colors.primaryText)
+                            }
+                        }
+                        .padding(AppLayout.cardPadding)
+                        .background(selectedAppearance == appearance ? colors.selection : Color.clear)
+                    }
+                    
+                    if appearance != AppAppearance.allCases.last {
+                        colors.divider.frame(height: 0.5)
+                    }
+                }
+            }
+            .glassCard()
+        }
+    }
+    
+    private func appearanceIcon(for appearance: AppAppearance) -> String {
+        switch appearance {
+        case .system: return "circle.lefthalf.filled"
+        case .dark: return "moon.fill"
+        case .light: return "sun.max.fill"
         }
     }
 
@@ -78,7 +144,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.signedInAs(appleSignIn.displayName))
                                 .font(AppFont.mono(size: 13, weight: .medium))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                         }
                         Spacer()
                         Button {
@@ -95,21 +161,21 @@ struct SettingsView: View {
                     }
                     .padding(AppLayout.cardPadding)
 
-                    Color.divider.frame(height: 0.5)
+                    colors.divider.frame(height: 0.5)
 
                     // Last backup date
                     HStack {
                         Text(L10n.lastBackup)
                             .font(AppFont.mono(size: 13, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.primaryText)
                         Spacer()
                         Text(lastBackupText)
                             .font(AppFont.mono(size: 13))
-                            .foregroundStyle(Color.muted)
+                            .foregroundStyle(colors.mutedText)
                     }
                     .padding(AppLayout.cardPadding)
 
-                    Color.divider.frame(height: 0.5)
+                    colors.divider.frame(height: 0.5)
 
                     // Backup Now button
                     Button {
@@ -120,33 +186,33 @@ struct SettingsView: View {
                         HStack {
                             if iCloudSync.isSyncing {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(colors.primaryText)
                                     .scaleEffect(0.8)
                                 Text(L10n.backingUp)
                                     .font(AppFont.mono(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 Spacer()
                                 Text("\(Int(iCloudSync.syncProgress * 100))%")
                                     .font(AppFont.mono(size: 11))
-                                    .foregroundStyle(Color.muted)
+                                    .foregroundStyle(colors.mutedText)
                             } else {
                                 Image(systemName: "icloud.and.arrow.up")
                                     .font(.system(size: 14))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 Text(L10n.backupNow)
                                     .font(AppFont.mono(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.muted)
+                                    .foregroundStyle(colors.mutedText)
                             }
                         }
                         .padding(AppLayout.cardPadding)
                     }
                     .disabled(iCloudSync.isSyncing || iCloudSync.isRestoring)
 
-                    Color.divider.frame(height: 0.5)
+                    colors.divider.frame(height: 0.5)
 
                     // Restore from iCloud button
                     Button {
@@ -155,26 +221,26 @@ struct SettingsView: View {
                         HStack {
                             if iCloudSync.isRestoring {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(colors.primaryText)
                                     .scaleEffect(0.8)
                                 Text(L10n.restoring)
                                     .font(AppFont.mono(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 Spacer()
                                 Text("\(Int(iCloudSync.syncProgress * 100))%")
                                     .font(AppFont.mono(size: 11))
-                                    .foregroundStyle(Color.muted)
+                                    .foregroundStyle(colors.mutedText)
                             } else {
                                 Image(systemName: "icloud.and.arrow.down")
                                     .font(.system(size: 14))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 Text(L10n.restoreFromiCloud)
                                     .font(AppFont.mono(size: 13, weight: .medium))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(colors.primaryText)
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.muted)
+                                    .foregroundStyle(colors.mutedText)
                             }
                         }
                         .padding(AppLayout.cardPadding)
@@ -185,7 +251,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(L10n.signInToBackup)
                             .font(AppFont.mono(size: 12))
-                            .foregroundStyle(Color.muted)
+                            .foregroundStyle(colors.mutedText)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Button {
@@ -242,7 +308,7 @@ struct SettingsView: View {
                 HStack {
                     Text(L10n.autoTranscribe)
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     Spacer()
                     Toggle("", isOn: $autoTranscribe)
                         .labelsHidden()
@@ -250,12 +316,12 @@ struct SettingsView: View {
                 }
                 .padding(AppLayout.cardPadding)
 
-                Color.divider.frame(height: 0.5)
+                colors.divider.frame(height: 0.5)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L10n.quality)
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
 
                     Picker(L10n.quality, selection: $recordingQuality) {
                         Text(L10n.standardQuality)
@@ -305,10 +371,10 @@ struct SettingsView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(L10n.appleTranscription)
                                         .font(AppFont.mono(size: 13, weight: .medium))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                     Text(L10n.usesOnDeviceSpeech)
                                         .font(AppFont.mono(size: 10))
-                                        .foregroundStyle(Color.muted)
+                                        .foregroundStyle(colors.mutedText)
                                 }
                                 Spacer()
                                 Toggle("", isOn: $useOnDeviceTranscription)
@@ -319,7 +385,7 @@ struct SettingsView: View {
                         .padding(AppLayout.cardPadding)
                         
                         if onDeviceSummarizationAvailable {
-                            Color.divider.frame(height: 0.5)
+                            colors.divider.frame(height: 0.5)
                         }
                     }
                     
@@ -331,14 +397,14 @@ struct SettingsView: View {
                                     HStack(spacing: 4) {
                                         Text(L10n.appleIntelligence)
                                             .font(AppFont.mono(size: 13, weight: .medium))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(colors.primaryText)
                                         Image(systemName: "apple.intelligence")
                                             .font(.system(size: 12))
                                             .foregroundStyle(.white.opacity(0.7))
                                     }
                                     Text(L10n.summarizeOnDevice)
                                         .font(AppFont.mono(size: 10))
-                                        .foregroundStyle(Color.muted)
+                                        .foregroundStyle(colors.mutedText)
                                 }
                                 Spacer()
                                 Toggle("", isOn: $useOnDeviceSummarization)
@@ -351,17 +417,17 @@ struct SettingsView: View {
                     
                     // Language Settings (only shown when on-device transcription is enabled and available)
                     if useOnDeviceTranscription && onDeviceTranscriptionAvailable {
-                        Color.divider.frame(height: 0.5)
+                        colors.divider.frame(height: 0.5)
                         
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(L10n.autoDetectLanguage)
                                         .font(AppFont.mono(size: 13, weight: .medium))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                     Text(L10n.autoDetectsSpoken)
                                         .font(AppFont.mono(size: 10))
-                                        .foregroundStyle(Color.muted)
+                                        .foregroundStyle(colors.mutedText)
                                 }
                                 Spacer()
                                 Toggle("", isOn: $useAutoLanguageDetection)
@@ -371,7 +437,7 @@ struct SettingsView: View {
                         }
                         .padding(AppLayout.cardPadding)
                         
-                        Color.divider.frame(height: 0.5)
+                        colors.divider.frame(height: 0.5)
                         
                         // Preferred Language selector
                         Button {
@@ -381,24 +447,24 @@ struct SettingsView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(useAutoLanguageDetection ? L10n.fallbackLanguage : L10n.transcriptionLanguage)
                                         .font(AppFont.mono(size: 13, weight: .medium))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                     Text(useAutoLanguageDetection ? L10n.usedIfDetectionFails : L10n.languageForTranscription)
                                         .font(AppFont.mono(size: 10))
-                                        .foregroundStyle(Color.muted)
+                                        .foregroundStyle(colors.mutedText)
                                 }
                                 Spacer()
                                 Text(languageDisplayName(for: preferredLanguage))
                                     .font(AppFont.mono(size: 13))
-                                    .foregroundStyle(Color.muted)
+                                    .foregroundStyle(colors.mutedText)
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(Color.muted)
+                                    .foregroundStyle(colors.mutedText)
                             }
                         }
                         .padding(AppLayout.cardPadding)
                     }
                     
-                    Color.divider.frame(height: 0.5)
+                    colors.divider.frame(height: 0.5)
                     
                     // Info about on-device processing
                     HStack(spacing: 8) {
@@ -407,7 +473,7 @@ struct SettingsView: View {
                             .foregroundStyle(.green)
                         Text(L10n.onDevicePrivacy)
                             .font(AppFont.mono(size: 10))
-                            .foregroundStyle(Color.muted)
+                            .foregroundStyle(colors.mutedText)
                     }
                     .padding(AppLayout.cardPadding)
                 }
@@ -444,7 +510,7 @@ struct SettingsView: View {
                 HStack {
                     Text(L10n.hapticFeedback)
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     Spacer()
                     Toggle("", isOn: $hapticFeedback)
                         .labelsHidden()
@@ -469,19 +535,19 @@ struct SettingsView: View {
                 HStack {
                     Text(L10n.appLanguage)
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     Spacer()
                     HStack(spacing: 6) {
                         Text(locManager.currentLanguage.flag)
                             .font(.system(size: 16))
                         Text(locManager.currentLanguage.nativeName)
                             .font(AppFont.mono(size: 13))
-                            .foregroundStyle(Color.muted)
+                            .foregroundStyle(colors.mutedText)
                     }
                 }
                 .padding(AppLayout.cardPadding)
 
-                Color.divider.frame(height: 0.5)
+                colors.divider.frame(height: 0.5)
 
                 // Language grid
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 0) {
@@ -505,7 +571,7 @@ struct SettingsView: View {
                                 if locManager.currentLanguage == lang {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(colors.primaryText)
                                 }
                             }
                             .padding(.horizontal, 12)
@@ -529,28 +595,28 @@ struct SettingsView: View {
                 HStack {
                     Text(L10n.recordings)
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     Spacer()
                     Text("\(storageInfo.count)")
                         .font(AppFont.mono(size: 13))
-                        .foregroundStyle(Color.muted)
+                        .foregroundStyle(colors.mutedText)
                 }
                 .padding(AppLayout.cardPadding)
 
-                Color.divider.frame(height: 0.5)
+                colors.divider.frame(height: 0.5)
 
                 HStack {
                     Text(L10n.diskUsage)
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     Spacer()
                     Text(storageInfo.size)
                         .font(AppFont.mono(size: 13))
-                        .foregroundStyle(Color.muted)
+                        .foregroundStyle(colors.mutedText)
                 }
                 .padding(AppLayout.cardPadding)
 
-                Color.divider.frame(height: 0.5)
+                colors.divider.frame(height: 0.5)
 
                 Button {
                     showDeleteConfirmation = true
@@ -589,21 +655,21 @@ struct SettingsView: View {
                 HStack {
                     Text(L10n.version)
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     Spacer()
                     Text("1.0")
                         .font(AppFont.mono(size: 13))
-                        .foregroundStyle(Color.muted)
+                        .foregroundStyle(colors.mutedText)
                 }
                 .padding(AppLayout.cardPadding)
 
-                Color.divider.frame(height: 0.5)
+                colors.divider.frame(height: 0.5)
 
                 HStack {
                     Spacer()
                     Text(L10n.builtBy)
                         .font(AppFont.mono(size: 11, weight: .medium))
-                        .foregroundStyle(Color.muted)
+                        .foregroundStyle(colors.mutedText)
                     Spacer()
                 }
                 .padding(AppLayout.cardPadding)
@@ -626,7 +692,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Subscription Tier")
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     HStack(spacing: 8) {
                         ForEach(SubscriptionTier.allCases, id: \.self) { tier in
@@ -646,13 +712,13 @@ struct SettingsView: View {
                 }
                 .padding(AppLayout.cardPadding)
                 
-                Color.divider.frame(height: 0.5)
+                colors.divider.frame(height: 0.5)
                 
                 // Usage simulation
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Simulate Usage")
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     HStack(spacing: 8) {
                         Button {
@@ -660,7 +726,7 @@ struct SettingsView: View {
                         } label: {
                             Text("+30m")
                                 .font(AppFont.mono(size: 11, weight: .medium))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .background(Color.white.opacity(0.1))
@@ -672,7 +738,7 @@ struct SettingsView: View {
                         } label: {
                             Text("+1h")
                                 .font(AppFont.mono(size: 11, weight: .medium))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .background(Color.white.opacity(0.1))
@@ -694,17 +760,17 @@ struct SettingsView: View {
                     
                     Text("Used: \(formatSeconds(subscription.usage.transcriptionSecondsUsed)) / \(formatSeconds(subscription.currentTier.transcriptionLimitSeconds))")
                         .font(AppFont.mono(size: 10, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
                 .padding(AppLayout.cardPadding)
                 
-                Color.divider.frame(height: 0.5)
+                colors.divider.frame(height: 0.5)
                 
                 // Demo data generator
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Demo Data")
                         .font(AppFont.mono(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                     
                     HStack(spacing: 8) {
                         Button {
@@ -712,7 +778,7 @@ struct SettingsView: View {
                         } label: {
                             Text("Add Demo Items")
                                 .font(AppFont.mono(size: 11, weight: .medium))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .background(Color.white.opacity(0.1))
@@ -957,10 +1023,13 @@ struct SettingsView: View {
 struct LanguagePickerView: View {
     @Binding var selectedLanguage: String
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     
     /// Languages loaded on appear to avoid computation during view init
     @State private var availableLanguages: [(code: String, name: String, supportsOnDevice: Bool)] = []
     @State private var isLoading = true
+    
+    private var colors: AppColors { AppColors(colorScheme: colorScheme) }
     
     var body: some View {
         NavigationStack {
@@ -968,10 +1037,10 @@ struct LanguagePickerView: View {
                 if isLoading {
                     VStack(spacing: 12) {
                         ProgressView()
-                            .tint(.white)
+                            .tint(colors.primaryText)
                         Text(L10n.loadingLanguages)
                             .font(AppFont.mono(size: 12))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 60)
@@ -986,7 +1055,7 @@ struct LanguagePickerView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(language.name)
                                             .font(AppFont.mono(size: 14, weight: .medium))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(colors.primaryText)
                                         
                                         HStack(spacing: 4) {
                                             if language.supportsOnDevice {
@@ -1009,14 +1078,14 @@ struct LanguagePickerView: View {
                                     if selectedLanguage == language.code {
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(colors.primaryText)
                                     }
                                 }
                                 .padding(AppLayout.cardPadding)
                             }
                             
                             if language.code != availableLanguages.last?.code {
-                                Color.divider.frame(height: 0.5)
+                                colors.divider.frame(height: 0.5)
                             }
                         }
                     }
@@ -1025,19 +1094,19 @@ struct LanguagePickerView: View {
                     .padding(.vertical, 24)
                 }
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(colors.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(L10n.language)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.cancel) { dismiss() }
                         .font(AppFont.mono(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
             }
         }

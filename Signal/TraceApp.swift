@@ -52,9 +52,13 @@ struct TraceApp: App {
     /// Handle incoming audio file or Trace package URLs from share sheet or file picker
     private func handleIncomingURL(_ url: URL) {
         let ext = url.pathExtension.lowercased()
+        let fileName = url.lastPathComponent.lowercased()
         
-        // Check if it's a Trace package
-        if ext == "traceaudio" || ext == "trace" || (ext == "zip" && url.lastPathComponent.contains(".traceaudio.")) {
+        // Check if it's a Trace package (.traceapp, .traceapp.zip, .traceaudio, .traceaudio.zip, .trace)
+        let isTracePackage = ext == "traceapp" || ext == "traceaudio" || ext == "trace" || 
+                             fileName.hasSuffix(".traceapp.zip") || fileName.hasSuffix(".traceaudio.zip")
+        
+        if isTracePackage {
             Task { @MainActor in
                 let success = await TracePackageExporter.shared.importTracePackage(
                     from: url,

@@ -6,6 +6,11 @@ import SwiftData
 struct RecorderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     private var recorder = AudioRecorder.shared
 
@@ -59,8 +64,7 @@ struct RecorderView: View {
                 .padding(.bottom, 48)
                 .padding(.horizontal, AppLayout.horizontalPadding)
         }
-        .background(Color.black.ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .background(colors.background.ignoresSafeArea())
         .alert(L10n.error, isPresented: $permissionDenied) {
             if errorMessage.contains("not authorized") || errorMessage.contains("permission") {
                 Button(L10n.settings) {
@@ -129,7 +133,7 @@ struct RecorderView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
 
             Spacer()
@@ -137,14 +141,14 @@ struct RecorderView: View {
             if recorder.isRecording {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(Color.white)
+                        .fill(colors.primaryText)
                         .frame(width: 6, height: 6)
                         .opacity(recorder.isPaused ? 0.25 : 1.0)
 
                     Text(recorder.isPaused ? L10n.paused : L10n.recording)
                         .font(AppFont.mono(size: 11, weight: .semibold))
                         .kerning(1.5)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .opacity(recorder.isPaused ? 0.25 : 1.0)
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
@@ -162,7 +166,7 @@ struct RecorderView: View {
         VStack(spacing: 4) {
             Text(recorder.currentTime.formattedPadded)
                 .font(AppFont.mono(size: 48, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .monospacedDigit()
                 .contentTransition(.numericText())
 
@@ -170,7 +174,7 @@ struct RecorderView: View {
                 Text("\(recorder.marks.count) \(L10n.marks.uppercased())")
                     .font(AppFont.mono(size: 11, weight: .medium))
                     .kerning(1.5)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
             }
         }
     }
@@ -189,7 +193,7 @@ struct RecorderView: View {
                             Text(mark.formattedPadded)
                                 .font(AppFont.mono(size: 11, weight: .medium))
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .glassCard(radius: 100)
@@ -241,18 +245,18 @@ struct RecorderView: View {
                     VStack(spacing: 6) {
                         ZStack {
                             Circle()
-                                .fill(Color.white)
+                                .fill(colors.primaryText)
                                 .frame(width: 56, height: 56)
 
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.black)
+                                .fill(colors.background)
                                 .frame(width: 18, height: 18)
                         }
 
                         Text(L10n.cut)
                             .font(AppFont.mono(size: 9, weight: .medium))
                             .kerning(1.2)
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                 }
                 .disabled(isSaving)
@@ -264,18 +268,18 @@ struct RecorderView: View {
                     VStack(spacing: 6) {
                         ZStack {
                             Circle()
-                                .stroke(Color.white, lineWidth: 3)
+                                .stroke(colors.primaryText, lineWidth: 3)
                                 .frame(width: 72, height: 72)
 
                             Circle()
-                                .fill(Color.white)
+                                .fill(colors.primaryText)
                                 .frame(width: 60, height: 60)
                         }
 
                         Text(L10n.record)
                             .font(AppFont.mono(size: 9, weight: .medium))
                             .kerning(1.2)
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                 }
             }
@@ -293,18 +297,18 @@ struct RecorderView: View {
                     .frame(width: 56, height: 56)
 
                 Circle()
-                    .stroke(Color.glassBorder, lineWidth: AppLayout.glassBorderWidth)
+                    .stroke(colors.glassBorder, lineWidth: AppLayout.glassBorderWidth)
                     .frame(width: 56, height: 56)
 
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
             }
 
             Text(label)
                 .font(AppFont.mono(size: 9, weight: .medium))
                 .kerning(1.2)
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
         }
     }
 
@@ -391,23 +395,26 @@ struct RecorderView: View {
 struct MeetingNotesSheet: View {
     @Binding var notes: String
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var isFocused: Bool
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
                 TextEditor(text: $notes)
                     .font(AppFont.mono(size: 15, weight: .regular))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .scrollContentBackground(.hidden)
                     .focused($isFocused)
                     .padding(.horizontal, AppLayout.horizontalPadding)
                     .padding(.top, 12)
             }
-            .background(Color.black.ignoresSafeArea())
-            .preferredColorScheme(.dark)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(Color.black, for: .navigationBar)
+            .background(colors.background.ignoresSafeArea())
+            .toolbarBackground(colors.background, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -415,12 +422,12 @@ struct MeetingNotesSheet: View {
                     Text(L10n.notes)
                         .font(AppFont.mono(size: 13, weight: .semibold))
                         .kerning(2.0)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.done) { dismiss() }
                         .font(AppFont.mono(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
             }
             .onAppear { isFocused = true }
@@ -455,6 +462,11 @@ private struct WaveCanvas: View {
     let date: Date
     let isRecording: Bool
     let amplitude: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var waveColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
     
     // Compute phase based on time for smooth animation
     private var phase: CGFloat {
@@ -515,7 +527,7 @@ private struct WaveCanvas: View {
             else { path.addLine(to: CGPoint(x: x, y: y)) }
         }
         
-        context.stroke(path, with: .color(.white.opacity(opacity)),
+        context.stroke(path, with: .color(waveColor.opacity(opacity)),
                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
     }
 }

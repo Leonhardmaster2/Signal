@@ -8,6 +8,11 @@ struct RecordingOverviewSheet: View {
     @Bindable var recording: Recording
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     @State private var editedTitle: String = ""
     @State private var trimStart: CGFloat = 0
@@ -39,10 +44,9 @@ struct RecordingOverviewSheet: View {
                 .padding(.bottom, 40)
             }
             .scrollBounceBehavior(.basedOnSize)
-            .glassBackground()
-            .preferredColorScheme(.dark)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(Color.black, for: .navigationBar)
+            .background(colors.background.ignoresSafeArea())
+            .toolbarColorScheme(colorScheme, for: .navigationBar)
+            .toolbarBackground(colors.toolbarBackground, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -51,7 +55,7 @@ struct RecordingOverviewSheet: View {
                         showDeleteConfirm = true
                     }
                     .font(AppFont.mono(size: 14, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                 }
 
                 ToolbarItem(placement: .principal) {
@@ -63,7 +67,7 @@ struct RecordingOverviewSheet: View {
                         save()
                     }
                     .font(AppFont.mono(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                 }
             }
             .alert(L10n.discardRecording, isPresented: $showDeleteConfirm) {
@@ -190,20 +194,20 @@ struct RecordingOverviewSheet: View {
             HStack {
                 Text((Double(trimStart) * recording.duration).formatted)
                     .font(AppFont.mono(size: 11, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
 
                 Spacer()
 
                 Text("\(L10n.trimmed): \(trimmedDuration.formatted)")
                     .font(AppFont.mono(size: 11, weight: .medium))
                     .kerning(0.8)
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
 
                 Spacer()
 
                 Text((Double(trimEnd) * recording.duration).formatted)
                     .font(AppFont.mono(size: 11, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
             }
         }
     }
@@ -213,7 +217,7 @@ struct RecordingOverviewSheet: View {
             .fill(.ultraThinMaterial)
             .overlay(
                 RoundedRectangle(cornerRadius: 2)
-                    .stroke(Color.glassBorder, lineWidth: 1)
+                    .stroke(colors.glassBorder, lineWidth: 1)
             )
             .frame(width: 4, height: 96)
             .padding(.horizontal, 14) // 32pt total hit area
@@ -230,7 +234,7 @@ struct RecordingOverviewSheet: View {
         HStack(spacing: 0) {
             Text(AudioPlayer.formatTime(player.currentTime))
                 .font(AppFont.mono(size: 12, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .frame(width: 50, alignment: .leading)
 
             Spacer()
@@ -283,7 +287,7 @@ struct RecordingOverviewSheet: View {
 
             Text(AudioPlayer.formatTime(recording.duration))
                 .font(AppFont.mono(size: 12, weight: .regular))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
                 .frame(width: 50, alignment: .trailing)
         }
     }
@@ -310,17 +314,17 @@ struct RecordingOverviewSheet: View {
         VStack(spacing: 3) {
             Text(value)
                 .font(AppFont.mono(size: 18, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
             Text(label)
                 .font(AppFont.mono(size: 9, weight: .medium))
                 .kerning(1.0)
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var infoDivider: some View {
-        Rectangle().fill(Color.divider).frame(width: 0.5, height: 28)
+        Rectangle().fill(colors.divider).frame(width: 0.5, height: 28)
     }
 
     // MARK: - Title Section
@@ -331,14 +335,14 @@ struct RecordingOverviewSheet: View {
 
             TextField("", text: $editedTitle)
                 .font(AppFont.mono(size: 18, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .background(.thinMaterial.opacity(0.4))
                 .clipShape(RoundedRectangle(cornerRadius: AppLayout.inputRadius))
                 .overlay(
                     RoundedRectangle(cornerRadius: AppLayout.inputRadius)
-                        .stroke(Color.glassBorder, lineWidth: AppLayout.glassBorderWidth)
+                        .stroke(colors.glassBorder, lineWidth: AppLayout.glassBorderWidth)
                 )
         }
     }
@@ -381,7 +385,7 @@ struct RecordingOverviewSheet: View {
                         .font(AppFont.mono(size: 12, weight: .medium))
                         .kerning(0.8)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .glassCard(radius: 12)
@@ -400,7 +404,7 @@ struct RecordingOverviewSheet: View {
                             .font(AppFont.mono(size: 12, weight: .medium))
                             .kerning(0.8)
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .glassCard(radius: 12)

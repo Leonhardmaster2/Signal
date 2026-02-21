@@ -10,9 +10,14 @@ struct OnboardingView: View {
     @State private var creditOfferPrice: Double = 3.00
     @State private var hasShownCreditOffer = false
     @State private var selectedUsageType: UserUsageType? = UserUsageType.saved
+    @Environment(\.colorScheme) private var colorScheme
 
-    /// Total pages: language (0) + usage (1) + 3 feature pages (2,3,4)
-    private let totalPages = 5
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
+
+    /// Total pages: welcome (0) + language (1) + usage (2) + 3 feature pages (3,4,5) + tips (6)
+    private let totalPages = 7
 
     /// Feature pages based on the selected usage type (or generic defaults)
     private var featurePages: [UserUsageType.FeaturePage] {
@@ -21,7 +26,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            colors.background.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Skip button
@@ -32,7 +37,7 @@ struct OnboardingView: View {
                     } label: {
                         Text(L10n.skip)
                             .font(AppFont.mono(size: 14, weight: .medium))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                     }
                     .padding()
                 }
@@ -41,26 +46,36 @@ struct OnboardingView: View {
 
                 // Page content
                 TabView(selection: $currentPage) {
-                    // Page 0: Language selection
-                    LanguageSelectionPage()
+                    // Page 0: Welcome screen
+                    WelcomeScreen()
                         .tag(0)
-
-                    // Page 1: Usage profile
-                    UsageProfilePage(selectedUsageType: $selectedUsageType)
+                    
+                    // Page 1: Language selection
+                    LanguageSelectionPage()
                         .tag(1)
 
-                    // Page 2-4: Feature pages (dynamic based on usage selection)
+                    // Page 2: Usage profile
+                    UsageProfilePage(selectedUsageType: $selectedUsageType)
+                        .tag(2)
+
+                    // Page 3-5: Feature pages (dynamic based on usage selection)
                     ForEach(Array(featurePages.enumerated()), id: \.offset) { index, page in
                         OnboardingPageView(
                             icon: page.icon,
-                            iconColor: .white,
+                            iconColor: colors.primaryText,
                             title: page.title,
                             subtitle: page.subtitle,
-                            highlight: page.highlight
-                        ).tag(index + 2)
+                            highlight: page.highlight,
+                            colors: colors
+                        ).tag(index + 3)
                     }
+                    
+                    // Page 6: Quick tips
+                    QuickTipsPage()
+                        .tag(6)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .animation(.easeInOut(duration: 0.3), value: currentPage)
 
                 Spacer()
 
@@ -68,7 +83,7 @@ struct OnboardingView: View {
                 HStack(spacing: 8) {
                     ForEach(0..<totalPages, id: \.self) { index in
                         Circle()
-                            .fill(index == currentPage ? Color.white : Color.white.opacity(0.3))
+                            .fill(index == currentPage ? colors.primaryText : colors.mutedText)
                             .frame(width: 8, height: 8)
                     }
                 }
@@ -87,7 +102,7 @@ struct OnboardingView: View {
                                 Text(L10n.viewPremiumPlans)
                                     .font(AppFont.mono(size: 12, weight: .medium))
                             }
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(colors.mutedText)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                         }
@@ -110,10 +125,10 @@ struct OnboardingView: View {
                         Text(currentPage < totalPages - 1 ? L10n.continueButton : L10n.getStarted)
                             .font(AppFont.mono(size: 14, weight: .bold))
                             .kerning(2.0)
-                            .foregroundStyle(.black)
+                            .foregroundStyle(colors.background)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)
-                            .background(Color.white)
+                            .background(colors.primaryText)
                             .clipShape(Capsule())
                     }
                 }
@@ -124,7 +139,6 @@ struct OnboardingView: View {
                     .frame(height: 50)
             }
         }
-        .preferredColorScheme(.dark)
         .sheet(isPresented: $showPaywall) {
             PaywallView()
         }
@@ -167,23 +181,258 @@ struct OnboardingView: View {
     }
 }
 
+// MARK: - Welcome Screen
+
+struct WelcomeScreen: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var logoScale: CGFloat = 0.8
+    @State private var textOpacity: Double = 0
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
+    
+    var body: some View {
+        VStack(spacing: 32) {
+            Spacer()
+            
+            // App Logo with animation
+            AppLogo(height: 60)
+                .scaleEffect(logoScale)
+                .onAppear {
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+                        logoScale = 1.0
+                    }
+                    withAnimation(.easeIn(duration: 0.4).delay(0.3)) {
+                        textOpacity = 1.0
+                    }
+                }
+            
+            VStack(spacing: 16) {
+                Text("Welcome to Trace")
+                    .font(AppFont.mono(size: 28, weight: .bold))
+                    .foregroundStyle(colors.primaryText)
+                    .opacity(textOpacity)
+                
+                Text("Your intelligent\nvoice recorder")
+                    .font(AppFont.mono(size: 16, weight: .regular))
+                    .foregroundStyle(colors.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(6)
+                    .opacity(textOpacity)
+            }
+            
+            Spacer()
+            
+            // Feature highlights
+            VStack(spacing: 12) {
+                WelcomeFeature(icon: "mic.fill", text: "Unlimited recording", colors: colors)
+                WelcomeFeature(icon: "waveform.badge.magnifyingglass", text: "AI transcription", colors: colors)
+                WelcomeFeature(icon: "sparkles", text: "Smart summaries", colors: colors)
+            }
+            .opacity(textOpacity)
+            .padding(.horizontal, 32)
+            
+            Spacer()
+        }
+    }
+}
+
+struct WelcomeFeature: View {
+    let icon: String
+    let text: String
+    let colors: AppColors
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(colors.primaryText.opacity(0.7))
+                .frame(width: 20)
+            
+            Text(text)
+                .font(AppFont.mono(size: 13, weight: .medium))
+                .foregroundStyle(colors.secondaryText)
+            
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Quick Tips Page
+
+struct QuickTipsPage: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var notificationGranted = false
+    @State private var showNotificationPrompt = true
+    
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
+    
+    var body: some View {
+        VStack(spacing: 28) {
+            // Icon
+            ZStack {
+                Image(systemName: "lightbulb.fill")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(colors.primaryText)
+                    .padding(36)
+            }
+            .glassEffect(.regular, in: Circle())
+            
+            Text("Quick Tips")
+                .font(AppFont.mono(size: 22, weight: .bold))
+                .foregroundStyle(colors.primaryText)
+            
+            VStack(spacing: 16) {
+                TipRow(
+                    number: "1",
+                    title: "Tap Record to start",
+                    description: "Use the floating button to capture any moment",
+                    colors: colors
+                )
+                
+                TipRow(
+                    number: "2",
+                    title: "Add marks during recording",
+                    description: "Mark important moments while you record",
+                    colors: colors
+                )
+                
+                TipRow(
+                    number: "3",
+                    title: "Transcribe when done",
+                    description: "Get AI-powered transcripts and summaries",
+                    colors: colors
+                )
+                
+                TipRow(
+                    number: "4",
+                    title: "Ask your audio",
+                    description: "Chat with AI about your recordings",
+                    colors: colors
+                )
+            }
+            .padding(.horizontal, 24)
+            
+            // Notification permission prompt
+            if showNotificationPrompt && !notificationGranted {
+                VStack(spacing: 12) {
+                    Divider()
+                        .padding(.vertical, 8)
+                    
+                    HStack(spacing: 12) {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(colors.primaryText.opacity(0.7))
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Enable notifications")
+                                .font(AppFont.mono(size: 13, weight: .bold))
+                                .foregroundStyle(colors.primaryText)
+                            
+                            Text("Get notified when transcriptions finish")
+                                .font(AppFont.mono(size: 10, weight: .regular))
+                                .foregroundStyle(colors.secondaryText)
+                        }
+                        
+                        Spacer()
+                        
+                        Button {
+                            Task {
+                                let granted = await NotificationService.shared.requestAuthorization()
+                                await MainActor.run {
+                                    notificationGranted = granted
+                                    if granted {
+                                        withAnimation {
+                                            showNotificationPrompt = false
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Text("Enable")
+                                .font(AppFont.mono(size: 11, weight: .bold))
+                                .foregroundStyle(colors.background)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(colors.primaryText)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .onAppear {
+            Task {
+                let status = await NotificationService.shared.checkAuthorizationStatus()
+                await MainActor.run {
+                    notificationGranted = (status == .authorized)
+                    showNotificationPrompt = (status == .notDetermined)
+                }
+            }
+        }
+    }
+}
+
+struct TipRow: View {
+    let number: String
+    let title: String
+    let description: String
+    let colors: AppColors
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            // Number badge
+            Text(number)
+                .font(AppFont.mono(size: 12, weight: .bold))
+                .foregroundStyle(colors.background)
+                .frame(width: 24, height: 24)
+                .background(colors.primaryText)
+                .clipShape(Circle())
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(AppFont.mono(size: 13, weight: .bold))
+                    .foregroundStyle(colors.primaryText)
+                
+                Text(description)
+                    .font(AppFont.mono(size: 11, weight: .regular))
+                    .foregroundStyle(colors.secondaryText)
+                    .lineSpacing(4)
+            }
+            
+            Spacer()
+        }
+    }
+}
+
 // MARK: - Language Selection Page
 
 struct LanguageSelectionPage: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
+
     var body: some View {
         VStack(spacing: 24) {
             // Globe icon
             ZStack {
                 Image(systemName: "globe")
                     .font(.system(size: 48, weight: .light))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .padding(36)
             }
             .glassEffect(.regular, in: Circle())
 
             Text(L10n.chooseLanguage)
                 .font(AppFont.mono(size: 22, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .multilineTextAlignment(.center)
 
             // Language grid
@@ -206,6 +455,11 @@ struct LanguageSelectionPage: View {
 private struct LanguageCell: View {
     let language: AppLanguage
     @State private var locManager = LocalizationManager.shared
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     var isSelected: Bool { locManager.currentLanguage == language }
 
@@ -221,7 +475,7 @@ private struct LanguageCell: View {
 
                 Text(language.nativeName)
                     .font(AppFont.mono(size: 12, weight: isSelected ? .bold : .regular))
-                    .foregroundStyle(isSelected ? .white : .gray)
+                    .foregroundStyle(isSelected ? colors.primaryText : colors.secondaryText)
                     .lineLimit(1)
 
                 Spacer()
@@ -229,16 +483,16 @@ private struct LanguageCell: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
+            .background(isSelected ? colors.primaryText.opacity(0.12) : colors.primaryText.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? Color.white.opacity(0.3) : Color.clear, lineWidth: 1)
+                    .stroke(isSelected ? colors.primaryText.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }
     }
@@ -470,6 +724,11 @@ enum UserUsageType: String, CaseIterable, Identifiable {
 
 struct UsageProfilePage: View {
     @Binding var selectedUsageType: UserUsageType?
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -477,19 +736,19 @@ struct UsageProfilePage: View {
             ZStack {
                 Image(systemName: "person.text.rectangle")
                     .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .padding(36)
             }
             .glassEffect(.regular, in: Circle())
 
             Text(L10n.howWillYouUse)
                 .font(AppFont.mono(size: 22, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .multilineTextAlignment(.center)
 
             Text(L10n.usageSubtitle)
                 .font(AppFont.mono(size: 12))
-                .foregroundStyle(.gray)
+                .foregroundStyle(colors.secondaryText)
 
             // Usage grid
             ScrollView {
@@ -517,31 +776,36 @@ private struct UsageCell: View {
     let usage: UserUsageType
     let isSelected: Bool
     let onTap: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
 
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 6) {
                 Image(systemName: usage.icon)
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(isSelected ? .white : .gray)
+                    .foregroundStyle(isSelected ? colors.primaryText : colors.secondaryText)
 
                 Text(usage.label)
                     .font(AppFont.mono(size: 12, weight: isSelected ? .bold : .medium))
-                    .foregroundStyle(isSelected ? .white : .gray)
+                    .foregroundStyle(isSelected ? colors.primaryText : colors.secondaryText)
 
                 Text(usage.description)
                     .font(AppFont.mono(size: 9))
-                    .foregroundStyle(isSelected ? .white.opacity(0.7) : .gray.opacity(0.6))
+                    .foregroundStyle(isSelected ? colors.primaryText.opacity(0.7) : colors.secondaryText.opacity(0.6))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .padding(.horizontal, 8)
-            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
+            .background(isSelected ? colors.primaryText.opacity(0.12) : colors.primaryText.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.white.opacity(0.3) : Color.clear, lineWidth: 1)
+                    .stroke(isSelected ? colors.primaryText.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }
     }
@@ -555,6 +819,7 @@ struct OnboardingPageView: View {
     let title: String
     let subtitle: String
     let highlight: String
+    let colors: AppColors
 
     var body: some View {
         VStack(spacing: 32) {
@@ -570,14 +835,14 @@ struct OnboardingPageView: View {
             VStack(spacing: 20) {
                 Text(title)
                     .font(AppFont.mono(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colors.primaryText)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(subtitle)
                     .font(AppFont.mono(size: 13, weight: .regular))
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(colors.secondaryText)
                     .multilineTextAlignment(.center)
                     .lineSpacing(8)
                     .padding(.horizontal, 32)
@@ -588,10 +853,10 @@ struct OnboardingPageView: View {
             Text(highlight)
                 .font(AppFont.mono(size: 11, weight: .bold))
                 .kerning(1.0)
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.primaryText)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .glassEffect(.regular.tint(.white.opacity(0.1)), in: Capsule())
+                .glassEffect(.regular.tint(colors.primaryText.opacity(0.1)), in: Capsule())
         }
         .padding(.horizontal, 32)
     }
@@ -617,13 +882,18 @@ struct CreditPackOfferView: View {
     let onDismiss: () -> Void
     
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isPurchasing = false
     @State private var showError = false
     @State private var errorMessage = ""
+
+    private var colors: AppColors {
+        AppColors(colorScheme: colorScheme)
+    }
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            colors.background.ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Close button
@@ -635,7 +905,7 @@ struct CreditPackOfferView: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(colors.secondaryText)
                             .padding(12)
                     }
                     .disabled(isPurchasing)
@@ -650,16 +920,16 @@ struct CreditPackOfferView: View {
                     if price == 3.00 {
                         Text(L10n.oneTimeOffer)
                             .font(AppFont.mono(size: 10, weight: .bold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(colors.background)
                             .kerning(1.2)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(Color.white)
+                            .background(colors.primaryText)
                             .clipShape(Capsule())
                     } else {
                         Text(L10n.finalOffer)
                             .font(AppFont.mono(size: 10, weight: .bold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(colors.background)
                             .kerning(1.2)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -670,7 +940,7 @@ struct CreditPackOfferView: View {
                     // Title
                     Text(L10n.tryBeforeSubscribe)
                         .font(AppFont.mono(size: 20, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colors.primaryText)
                         .multilineTextAlignment(.center)
                     
                     // Price
@@ -678,25 +948,25 @@ struct CreditPackOfferView: View {
                         if price == 1.50 {
                             Text("$3.00")
                                 .font(AppFont.mono(size: 18, weight: .bold))
-                                .foregroundStyle(.gray.opacity(0.5))
+                                .foregroundStyle(colors.secondaryText.opacity(0.5))
                                 .strikethrough(color: .red)
                         }
                         
                         HStack(alignment: .firstTextBaseline, spacing: 2) {
                             Text("$")
                                 .font(AppFont.mono(size: 24, weight: .bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                             Text(String(format: "%.2f", price))
                                 .font(AppFont.mono(size: 56, weight: .bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(colors.primaryText)
                         }
                     }
                     
                     // Features
                     VStack(spacing: 10) {
-                        OfferFeature(icon: "clock.fill", text: L10n.twoHoursTranscription)
-                        OfferFeature(icon: "infinity", text: L10n.creditsNeverExpire)
-                        OfferFeature(icon: "xmark.circle.fill", text: L10n.noSubscriptionRequired)
+                        OfferFeature(icon: "clock.fill", text: L10n.twoHoursTranscription, colors: colors)
+                        OfferFeature(icon: "infinity", text: L10n.creditsNeverExpire, colors: colors)
+                        OfferFeature(icon: "xmark.circle.fill", text: L10n.noSubscriptionRequired, colors: colors)
                     }
                 }
                 
@@ -711,31 +981,30 @@ struct CreditPackOfferView: View {
                     } label: {
                         if isPurchasing {
                             ProgressView()
-                                .tint(.black)
+                                .tint(colors.background)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
                         } else {
                             Text(L10n.get2Hours)
                                 .font(AppFont.mono(size: 13, weight: .bold))
                                 .kerning(1.5)
-                                .foregroundStyle(.black)
+                                .foregroundStyle(colors.background)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
                         }
                     }
-                    .background(price == 1.50 ? Color.yellow : Color.white)
+                    .background(price == 1.50 ? Color.yellow : colors.primaryText)
                     .clipShape(Capsule())
                     .disabled(isPurchasing)
                     
                     Text(L10n.oneTimePurchase)
                         .font(AppFont.mono(size: 9, weight: .regular))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(colors.secondaryText)
                 }
                 .padding(.horizontal, 32)
                 .padding(.bottom, 40)
             }
         }
-        .preferredColorScheme(.dark)
         .alert(L10n.purchaseError, isPresented: $showError) {
             Button(L10n.ok, role: .cancel) {}
         } message: {
@@ -767,17 +1036,18 @@ struct CreditPackOfferView: View {
 struct OfferFeature: View {
     let icon: String
     let text: String
+    let colors: AppColors
     
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(colors.primaryText.opacity(0.6))
                 .frame(width: 16)
             
             Text(text)
                 .font(AppFont.mono(size: 12, weight: .regular))
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(colors.primaryText.opacity(0.8))
             
             Spacer()
         }
