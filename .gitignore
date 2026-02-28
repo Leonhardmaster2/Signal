@@ -1,5 +1,14 @@
-# Secrets
+# Secrets - NEVER COMMIT THESE!
 Signal/Secrets.plist
+*.plist.backup
+*_SECRET_*
+.env
+.env.local
+
+# Firebase Functions
+firebase/functions/node_modules/
+firebase/functions/lib/
+firebase/functions/.runtimeconfig.json
 
 # Xcode
 *.xcuserstate
@@ -15,3 +24,12 @@ DerivedData/
 
 # macOS
 .DS_Store
+
+# Node/NPM
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# IDE
+.vscode/
+.idea/

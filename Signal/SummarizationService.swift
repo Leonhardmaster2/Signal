@@ -80,6 +80,9 @@ private struct GeminiCalendarEvent: Decodable {
     let eventDate: String?
     let duration: Double?
     let timestamp: Double?
+    let location: String?
+    let attendees: [String]?
+    let notes: String?
 }
 
 // MARK: - Errors
@@ -93,10 +96,10 @@ enum SummarizationError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noAPIKey: return "No Gemini API key found. Add your key in Secrets.plist."
+        case .noAPIKey: return "Please sign in to use cloud summarization."
         case .noTranscript: return "No transcript available to summarize."
-        case .requestFailed(let code, let msg): return "Gemini API error (\(code)): \(msg)"
-        case .emptyResponse: return "Gemini returned an empty response."
+        case .requestFailed(let code, let msg): return "Summarization error (\(code)): \(msg)"
+        case .emptyResponse: return "Summarization returned an empty response."
         case .decodingFailed(let msg): return "Failed to parse summary: \(msg)"
         }
     }
@@ -119,20 +122,7 @@ final class SummarizationService {
         useOnDevice && OnDeviceSummarizationService.shared.isAvailable
     }
 
-    private var apiKey: String? {
-        // Check UserDefaults first (set from Settings)
-        let stored = UserDefaults.standard.string(forKey: "geminiAPIKey")
-        if let stored, !stored.isEmpty, stored != "YOUR_API_KEY_HERE" {
-            return stored
-        }
-        // Fall back to Secrets.plist
-        guard let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
-              let dict = NSDictionary(contentsOfFile: path),
-              let key = dict["GEMINI_API_KEY"] as? String,
-              key != "YOUR_API_KEY_HERE"
-        else { return nil }
-        return key
-    }
+
 
     /// Summarize a transcript into a one-liner, context paragraph, sources, and action items.
     /// - Parameters:
@@ -140,58 +130,38 @@ final class SummarizationService {
     ///   - meetingNotes: Optional user-provided meeting notes
     ///   - language: Optional language code (e.g., "en", "de", "es") - summary will be in this language
     func summarize(transcript: String, meetingNotes: String? = nil, language: String? = nil) async throws -> (oneLiner: String, context: String, actions: [ActionData], sources: [SourceData], emails: [EmailActionData], reminders: [ReminderActionData], calendarEvents: [CalendarEventData]) {
-        guard let apiKey else { throw SummarizationError.noAPIKey }
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw SummarizationError.noTranscript
         }
 
         let prompt = buildPrompt(transcript: transcript, meetingNotes: meetingNotes, language: language)
 
-        let request = GeminiRequest(
-            contents: [GeminiContent(parts: [GeminiPart(text: prompt)])],
-            generationConfig: GeminiGenerationConfig(
+        // Use Firebase Cloud Function for secure API proxying
+        print("☁️ [Summarize] Using Firebase Cloud Function for summarization")
+        
+        do {
+            let text = try await FirebaseService.shared.generateText(
+                prompt: prompt,
                 temperature: 0.3,
                 maxOutputTokens: 2048,
                 responseMimeType: "application/json"
             )
-        )
-
-        let urlString = "\(baseURL)?key=\(apiKey)"
-        guard let url = URL(string: urlString) else {
-            throw SummarizationError.requestFailed(0, "Invalid URL")
-        }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try JSONEncoder().encode(request)
-
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw SummarizationError.requestFailed(0, "No HTTP response")
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw SummarizationError.requestFailed(httpResponse.statusCode, errorBody)
-        }
-
-        // Parse the Gemini response envelope
-        let geminiResponse: GeminiResponse
-        do {
-            geminiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
+            
+            // Parse the JSON summary from Gemini's output
+            return try parseSummaryJSON(text)
+        } catch let error as FirebaseServiceError {
+            // Map Firebase errors to SummarizationError
+            switch error {
+            case .notAuthenticated:
+                throw SummarizationError.noAPIKey // Will prompt user to sign in
+            case .invalidResponse, .emptyResponse:
+                throw SummarizationError.emptyResponse
+            case .functionsError(_, let message):
+                throw SummarizationError.requestFailed(500, message)
+            }
         } catch {
-            throw SummarizationError.decodingFailed("Could not parse Gemini response: \(error.localizedDescription)")
+            throw error
         }
-
-        guard let text = geminiResponse.candidates?.first?.content?.parts?.first?.text,
-              !text.isEmpty else {
-            throw SummarizationError.emptyResponse
-        }
-
-        // Parse the JSON summary from Gemini's output
-        return try parseSummaryJSON(text)
     }
 
     // MARK: - Prompt
@@ -221,7 +191,7 @@ final class SummarizationService {
         - "actions": An array of action items with "assignee" (speaker name or "Team"), "task" (clear, actionable description), and optional "timestamp" (in seconds, where this action was mentioned).
         - "emails": An array of email-sending references. Include when someone says things like "email John about X", "send the report to Y", "I'll write them an email". Each has "recipient" (person/group name), "subject" (inferred subject line), "body" (suggested brief email body), and optional "timestamp" (seconds). If none found, return an empty array.
         - "reminders": An array of deadlines or tasks with due dates. Include when someone mentions things like "finish by tonight", "submit the report by Friday", "don't forget to call them tomorrow". Each has "title" (what needs to be done), "dueDescription" (natural language date like "by Friday"), "dueDate" (ISO 8601 format with Z suffix like "2026-02-15T18:00:00Z" if parseable, otherwise null), and optional "timestamp" (seconds). If none found, return an empty array.
-        - "calendarEvents": An array of meetings or events to schedule. Include when someone says things like "let's meet Tuesday at 3pm", "schedule a call for next week", "the presentation is on March 5th". Each has "title" (event name), "dateDescription" (natural language like "Tuesday at 3pm"), "eventDate" (ISO 8601 format with Z suffix like "2026-03-05T15:00:00Z" if parseable, otherwise null), "duration" (in seconds, default 3600), and optional "timestamp" (seconds). If none found, return an empty array.
+        - "calendarEvents": An array of meetings or events to schedule. Include when someone says things like "let's meet Tuesday at 3pm", "schedule a call for next week", "the presentation is on March 5th". Each has "title" (event name), "dateDescription" (natural language like "Tuesday at 3pm"), "eventDate" (ISO 8601 format with Z suffix like "2026-03-05T15:00:00Z" if parseable, otherwise null), "duration" (in seconds, default 3600), optional "location" (meeting location if mentioned), optional "attendees" (array of attendee names if mentioned), optional "notes" (any additional context or agenda items), and optional "timestamp" (seconds). If none found, return an empty array.
         - If no clear action items exist, return an empty actions array.
         - Use speaker names as they appear in the transcript.
         - Be concise and factual. No filler.
@@ -235,7 +205,7 @@ final class SummarizationService {
           "actions": [{"assignee": "string", "task": "string", "timestamp": number}],
           "emails": [{"recipient": "string", "subject": "string", "body": "string", "timestamp": number}],
           "reminders": [{"title": "string", "dueDescription": "string", "dueDate": "string or null", "timestamp": number}],
-          "calendarEvents": [{"title": "string", "dateDescription": "string", "eventDate": "string or null", "duration": number, "timestamp": number}]
+          "calendarEvents": [{"title": "string", "dateDescription": "string", "eventDate": "string or null", "duration": number, "location": "string or null", "attendees": ["string"] or null, "notes": "string or null", "timestamp": number}]
         }
 
         TRANSCRIPT:
@@ -319,7 +289,7 @@ final class SummarizationService {
 
         let calendarEvents = (parsed.calendarEvents ?? []).map { e in
             let date = e.eventDate.flatMap { parseDate($0) }
-            return CalendarEventData(title: e.title, dateDescription: e.dateDescription, eventDate: date, duration: e.duration, timestamp: e.timestamp)
+            return CalendarEventData(title: e.title, dateDescription: e.dateDescription, eventDate: date, duration: e.duration, timestamp: e.timestamp, location: e.location, attendees: e.attendees, notes: e.notes)
         }
 
         return (parsed.oneLiner, parsed.context, actions, sources, emails, reminders, calendarEvents)
@@ -376,6 +346,58 @@ final class SummarizationService {
                 calendarEvents: result.calendarEvents,
                 wasOnDevice: false
             )
+        }
+    }
+    
+    // MARK: - Notes Summarization
+    
+    /// Summarize user meeting notes into a concise summary
+    /// - Parameter notes: The notes text to summarize
+    func summarizeNotes(notes: String) async throws -> String {
+        guard !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw SummarizationError.noTranscript
+        }
+        
+        let prompt = """
+        You are a precise notes summarizer. Analyze the following meeting notes and produce a concise summary.
+        
+        Rules:
+        - Create a brief, clear summary (2-4 sentences maximum)
+        - Capture the main points, decisions, and key takeaways
+        - Use bullet points if multiple distinct topics are covered
+        - Be concise and factual
+        - Preserve important details like dates, names, and specific commitments
+        
+        NOTES:
+        \(notes)
+        
+        Provide ONLY the summary text, no additional commentary.
+        """
+        
+        // Use Firebase Cloud Function for secure API proxying
+        print("☁️ [SummarizeNotes] Using Firebase Cloud Function")
+        
+        do {
+            let text = try await FirebaseService.shared.generateText(
+                prompt: prompt,
+                temperature: 0.3,
+                maxOutputTokens: 512,
+                responseMimeType: "text/plain"
+            )
+            
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch let error as FirebaseServiceError {
+            // Map Firebase errors to SummarizationError
+            switch error {
+            case .notAuthenticated:
+                throw SummarizationError.noAPIKey
+            case .invalidResponse, .emptyResponse:
+                throw SummarizationError.emptyResponse
+            case .functionsError(_, let message):
+                throw SummarizationError.requestFailed(500, message)
+            }
+        } catch {
+            throw error
         }
     }
 }

@@ -24,7 +24,7 @@ enum TranscriptionError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .noAPIKey: return "No API key found. Add your ElevenLabs key in Settings."
+        case .noAPIKey: return "Please sign in to use cloud transcription."
         case .fileNotFound: return "Audio file not found."
         case .uploadFailed(let code, let msg): return "Transcription failed (\(code)): \(msg)"
         case .decodingFailed: return "Failed to decode transcription response."
@@ -69,99 +69,25 @@ final class TranscriptionService {
         OnDeviceTranscriptionService.shared.cancelTranscription()
     }
 
-    private var apiKey: String? {
-        // Check UserDefaults first (set from Settings)
-        let stored = UserDefaults.standard.string(forKey: "elevenLabsAPIKey")
-        if let stored, !stored.isEmpty, stored != "YOUR_API_KEY_HERE" {
-            return stored
-        }
-        // Fall back to Secrets.plist
-        guard let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
-              let dict = NSDictionary(contentsOfFile: path),
-              let key = dict["ELEVENLABS_API_KEY"] as? String,
-              key != "YOUR_API_KEY_HERE"
-        else { return nil }
-        return key
-    }
-
     func transcribe(fileURL: URL, diarize: Bool = true) async throws -> ScribeResponse {
-        guard let apiKey else { throw TranscriptionError.noAPIKey }
+        // Use Firebase Cloud Function for secure API proxying
+        // This eliminates the need for API keys in the client
+        print("☁️ [Transcribe] Using Firebase Cloud Function for transcription")
         
-        // Use standardized path for reliable file checking
-        let standardURL = fileURL.standardizedFileURL
-        let filePath = standardURL.path(percentEncoded: false)
-        
-        print("☁️ [Transcribe] Checking file at: \(filePath)")
-        
-        guard FileManager.default.fileExists(atPath: filePath) else {
-            print("☁️ [Transcribe] ERROR: File not found at: \(filePath)")
-            throw TranscriptionError.fileNotFound
-        }
-        
-        print("☁️ [Transcribe] File exists, preparing upload...")
-
-        // Build the request body on a background thread since file I/O can be expensive
-        let body = try await Task.detached(priority: .userInitiated) { [standardURL] in
-            let boundary = UUID().uuidString
-            var data = Data()
-
-            func appendField(_ name: String, _ value: String) {
-                data.append("--\(boundary)\r\n".data(using: .utf8)!)
-                data.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-                data.append("\(value)\r\n".data(using: .utf8)!)
-            }
-
-            appendField("model_id", "scribe_v2")
-            appendField("diarize", diarize ? "true" : "false")
-            appendField("timestamps_granularity", "word")
-            appendField("tag_audio_events", "false")
-
-            let fileData = try Data(contentsOf: standardURL)
-            data.append("--\(boundary)\r\n".data(using: .utf8)!)
-            data.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(standardURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
-            data.append("Content-Type: audio/mp4\r\n\r\n".data(using: .utf8)!)
-            data.append(fileData)
-            data.append("\r\n".data(using: .utf8)!)
-            data.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-            return (data, boundary)
-        }.value
-
-        let url = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
-        request.setValue("multipart/form-data; boundary=\(body.1)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body.0
-
-        // Use custom session with extended timeouts for large audio files
-        let (data, response): (Data, URLResponse)
         do {
-            let task = uploadSession.dataTask(with: request)
-            activeURLTask = task
-            (data, response) = try await uploadSession.data(for: request)
-            activeURLTask = nil
-        } catch {
-            activeURLTask = nil
-            if (error as NSError).code == NSURLErrorCancelled {
-                throw TranscriptionError.cancelled
+            return try await FirebaseService.shared.processAudio(fileURL: fileURL, diarize: diarize)
+        } catch let error as FirebaseServiceError {
+            // Map Firebase errors to TranscriptionError
+            switch error {
+            case .notAuthenticated:
+                throw TranscriptionError.noAPIKey // Will prompt user to sign in
+            case .invalidResponse, .emptyResponse:
+                throw TranscriptionError.decodingFailed
+            case .functionsError(_, let message):
+                throw TranscriptionError.uploadFailed(500, message)
             }
+        } catch {
             throw error
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw TranscriptionError.uploadFailed(0, "No HTTP response")
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw TranscriptionError.uploadFailed(httpResponse.statusCode, errorBody)
-        }
-
-        do {
-            return try JSONDecoder().decode(ScribeResponse.self, from: data)
-        } catch {
-            throw TranscriptionError.decodingFailed
         }
     }
 
